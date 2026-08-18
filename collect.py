@@ -31,7 +31,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-TEMPLATE = BASE_DIR / "dashboard_template.html"
 
 # --------------------------------------------------------------------------
 # Configuracion
@@ -574,19 +573,12 @@ def build_payload(vaults, items, jobs, days, sla_hours, errors, orphans, ignore_
 
 
 def render(payload: dict, out_dir: Path) -> None:
+    """Escribe data.json de forma atomica: serve.py lo sirve en /api/data."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "data.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-    if not TEMPLATE.exists():
-        sys.exit(f"[ERROR] No se encuentra la plantilla {TEMPLATE}")
-
-    inline = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
-    inline = inline.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-
-    html = TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/null", inline)
-    (out_dir / "index.html").write_text(html, encoding="utf-8")
+    destino = out_dir / "data.json"
+    temporal = out_dir / "data.json.tmp"
+    temporal.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporal.replace(destino)
 
 
 # --------------------------------------------------------------------------
@@ -634,7 +626,7 @@ def main() -> int:
 
     render(payload, Path(args.out))
     print(
-        f"OK -> {args.out}/index.html | estado={payload['overall']} | "
+        f"OK -> {args.out}/data.json | estado={payload['overall']} | "
         f"VMs={payload['total_vms']} protegidas={payload['vms_protegidas']} "
         f"sin copia={payload['counts']['sincopia']} | jobs={payload['total_jobs']} "
         f"fallidos={payload['failed_jobs']} | huerfanos ocultos={payload['huerfanos']}"

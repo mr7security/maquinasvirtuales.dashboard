@@ -1,45 +1,182 @@
 #!/usr/bin/env python3
 """
-Servidor HTTP del dashboard de copias de Azure.
+Servidor del dashboard de copias y maquinas virtuales de Azure.
 
-Sirve el directorio generado por collect.py (index.html + data.json).
-Solo librería estándar: sin Flask, sin nginx, mismo enfoque que el resto de
-dashboards de la máquina.
+Rutas:
+    /            -> dashboard.html (shell estatico)
+    /api/data    -> data.json que genera collect.py
+    /csv         -> exportacion del estado actual
+    /logo        -> logo.png del directorio de la aplicacion, si existe
+    /salud       -> comprobacion simple para monitorizacion
+
+Solo libreria estandar, mismo enfoque que el resto de dashboards de la maquina.
 
 Uso:
-    python3 serve.py                       # 0.0.0.0:8090, sirve ./public
     python3 serve.py --port 8090 --dir /opt/dashboard-copias-azure/public
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import io
+import json
 import os
 import sys
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent
 
+COLUMNAS = [
+    ("name", "nombre"),
+    ("kind", "tipo_elemento"),
+    ("resource_group", "grupo_recursos"),
+    ("location", "ubicacion"),
+    ("power_state", "estado_energia"),
+    ("os", "sistema_operativo"),
+    ("size", "tamano"),
+    ("protected", "protegida"),
+    ("state", "estado"),
+    ("vault", "vault"),
+    ("policy", "politica"),
+    ("protection_state", "estado_proteccion"),
+    ("health", "salud"),
+    ("last_backup_status", "ultimo_backup_estado"),
+    ("last_backup_time", "ultimo_backup_fecha"),
+    ("last_recovery_point", "ultimo_punto"),
+    ("oldest_recovery_point", "punto_mas_antiguo"),
+]
 
-class Handler(SimpleHTTPRequestHandler):
-    """Sin caché (el HTML se regenera cada 30 min) y sin listado de directorios."""
 
-    server_version = "DashboardCopiasAzure/1.0"
+class Handler(BaseHTTPRequestHandler):
+    server_version = "DashboardCopiasAzure/2.0"
 
-    def end_headers(self) -> None:
+    # Rellenados desde main()
+    data_dir: Path = Path(".")
+    app_dir: Path = BASE_DIR
+
+    # ------------------------------------------------------------------
+    def responder(self, code: int, content_type: str, body: bytes, extra: dict | None = None) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store, must-revalidate")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        super().end_headers()
+        for key, value in (extra or {}).items():
+            self.send_header(key, value)
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
-    def list_directory(self, path):  # noqa: ARG002
-        self.send_error(404, "No encontrado")
-        return None
+    def error(self, code: int, msg: str) -> None:
+        self.responder(code, "text/plain; charset=utf-8", msg.encode("utf-8"))
 
+    def leer_datos(self) -> dict | None:
+        ruta = self.data_dir / "data.json"
+        if not ruta.exists():
+            return None
+        try:
+            return json.loads(ruta.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+
+    # ------------------------------------------------------------------
+    def do_HEAD(self) -> None:  # noqa: N802
+        self.do_GET()
+
+    def do_GET(self) -> None:  # noqa: N802
+        ruta = urlparse(self.path).path.rstrip("/") or "/"
+
+        if ruta == "/":
+            return self.servir_shell()
+        if ruta == "/api/data":
+            return self.servir_datos()
+        if ruta == "/csv":
+            return self.servir_csv()
+        if ruta == "/logo":
+            return self.servir_logo()
+        if ruta == "/salud":
+            datos = self.leer_datos()
+            estado = (datos or {}).get("overall", "sin-datos")
+            return self.responder(
+                200 if datos else 503, "text/plain; charset=utf-8", f"{estado}\n".encode("utf-8")
+            )
+        return self.error(404, "No encontrado")
+
+    # ------------------------------------------------------------------
+    def servir_shell(self) -> None:
+        for nombre in ("dashboard.html", "dashboard_template.html", "index.html"):
+            fichero = self.app_dir / nombre
+            if fichero.exists():
+                return self.responder(
+                    200, "text/html; charset=utf-8", fichero.read_bytes()
+                )
+        self.error(500, "No se encuentra dashboard.html en " + str(self.app_dir))
+
+    def servir_datos(self) -> None:
+        ruta = self.data_dir / "data.json"
+        if not ruta.exists():
+            cuerpo = json.dumps(
+                {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "overall": "unknown",
+                    "items": [],
+                    "jobs": [],
+                    "counts": {},
+                    "vaults": [],
+                    "collector_errors": [
+                        "Todavia no se ha generado data.json. Ejecuta collect.py "
+                        "o espera a la proxima pasada del timer."
+                    ],
+                }
+            ).encode("utf-8")
+            return self.responder(200, "application/json; charset=utf-8", cuerpo)
+        return self.responder(200, "application/json; charset=utf-8", ruta.read_bytes())
+
+    def servir_csv(self) -> None:
+        datos = self.leer_datos()
+        if datos is None:
+            return self.error(503, "Todavia no hay datos que exportar")
+
+        def celda(item: dict, clave: str):
+            valor = item.get(clave)
+            if isinstance(valor, bool):
+                return "si" if valor else "no"
+            return "" if valor is None else valor
+
+        buffer = io.StringIO()
+        # BOM + punto y coma: Excel en espanol lo abre bien de un doble clic
+        escritor = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
+        escritor.writerow([titulo for _, titulo in COLUMNAS])
+        for item in datos.get("items", []):
+            escritor.writerow([celda(item, clave) for clave, _ in COLUMNAS])
+
+        sello = datetime.now().strftime("%Y%m%d-%H%M")
+        cuerpo = ("﻿" + buffer.getvalue()).encode("utf-8")
+        self.responder(
+            200,
+            "text/csv; charset=utf-8",
+            cuerpo,
+            {"Content-Disposition": f'attachment; filename="copias-azure-{sello}.csv"'},
+        )
+
+    def servir_logo(self) -> None:
+        for nombre, mime in (
+            ("logo.png", "image/png"),
+            ("logo.jpg", "image/jpeg"),
+            ("logo.svg", "image/svg+xml"),
+        ):
+            fichero = self.app_dir / nombre
+            if fichero.exists():
+                return self.responder(200, mime, fichero.read_bytes())
+        self.error(404, "Sin logo")
+
+    # ------------------------------------------------------------------
     def log_message(self, fmt: str, *args) -> None:
-        # A journal, con el formato habitual de systemd
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
@@ -50,20 +187,20 @@ def main() -> int:
     parser.add_argument("--dir", default=os.environ.get("OUTPUT_DIR", str(BASE_DIR / "public")))
     args = parser.parse_args()
 
-    root = Path(args.dir)
-    root.mkdir(parents=True, exist_ok=True)
+    data_dir = Path(args.dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
 
-    if not (root / "index.html").exists():
+    Handler.data_dir = data_dir
+    Handler.app_dir = BASE_DIR
+
+    if not (data_dir / "data.json").exists():
         print(
-            f"[AVISO] Todavía no existe {root}/index.html. "
-            "Ejecuta collect.py para generarlo.",
+            f"[AVISO] Todavia no existe {data_dir}/data.json. Ejecuta collect.py para generarlo.",
             file=sys.stderr,
         )
 
-    handler = partial(Handler, directory=str(root))
-    server = ThreadingHTTPServer((args.bind, args.port), handler)
-    print(f"Sirviendo {root} en http://{args.bind}:{args.port}", file=sys.stderr)
-
+    server = ThreadingHTTPServer((args.bind, args.port), Handler)
+    print(f"Sirviendo {data_dir} en http://{args.bind}:{args.port}", file=sys.stderr)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

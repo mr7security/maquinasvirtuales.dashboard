@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Copias y Máquinas Virtuales — Azure</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#0f1c30; --text:#e2e8f0; --muted:#94a3b8;
+    --ok:#22c55e; --alarm:#ef4444; --warn:#f59e0b; --off:#64748b; --accent:#38bdf8;
+    --nobkp:#a78bfa;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; padding:18px 22px}
+  header{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:16px}
+  h1{font-size:1.3rem; font-weight:600; text-transform:uppercase; letter-spacing:.03em}
+  h1 span{color:var(--accent)}
+  #clock{font-size:1.05rem; color:var(--muted); font-variant-numeric:tabular-nums}
+  .btns{display:flex; gap:8px; flex-wrap:wrap}
+  .btn{background:var(--card); color:var(--text); border:1px solid #334155; border-radius:8px;
+       padding:7px 13px; font-size:.85rem; cursor:pointer; text-transform:uppercase; letter-spacing:.02em}
+  .btn:hover{border-color:var(--accent)}
+  .btn.active{background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:600}
+  #banner{display:none; background:#3a2b12; border:1px solid var(--warn); border-radius:10px;
+          padding:12px 16px; margin-bottom:14px; font-size:.85rem}
+  #banner.show{display:block}
+  #banner.bad{background:#3b1f2b; border-color:var(--alarm)}
+  #banner ul{margin:6px 0 0 18px}
+
+  /* ---------- resumen ---------- */
+  #kpis{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px}
+  .kpi{background:var(--card); border-radius:12px; padding:10px 16px; min-width:110px; border-left:4px solid var(--off)}
+  .kpi .n{font-size:1.9rem; font-weight:800; line-height:1.1; font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:.66rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:2px}
+  .kpi.ok{border-left-color:var(--ok)} .kpi.ok .n{color:var(--ok)}
+  .kpi.warn{border-left-color:var(--warn)} .kpi.warn .n{color:var(--warn)}
+  .kpi.alarm{border-left-color:var(--alarm)} .kpi.alarm .n{color:var(--alarm)}
+  .kpi.nobkp{border-left-color:var(--nobkp)} .kpi.nobkp .n{color:var(--nobkp)}
+
+  .pill{border-radius:99px; padding:3px 12px; font-weight:600; text-transform:uppercase;
+        letter-spacing:.02em; font-size:.78rem}
+  .pill.ok{background:rgba(34,197,94,.15); color:var(--ok)}
+  .pill.alarm{background:rgba(239,68,68,.2); color:var(--alarm)}
+  .pill.warn{background:rgba(245,158,11,.18); color:var(--warn)}
+  .pill.off{background:rgba(100,116,139,.2); color:var(--off)}
+  .pill.nobkp{background:rgba(167,139,250,.18); color:var(--nobkp)}
+
+  /* ---------- filtros ---------- */
+  .tools{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px}
+  input[type=search],select{background:var(--card); color:var(--text); border:1px solid #334155;
+        border-radius:8px; padding:7px 11px; font-size:.85rem; font-family:inherit}
+  input[type=search]{min-width:230px}
+  .count{font-size:.75rem; color:var(--muted)}
+
+  /* ---------- tarjetas ---------- */
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px}
+  .card{background:var(--card); border-radius:12px; padding:12px 14px; border-left:5px solid var(--off);
+        display:flex; flex-direction:column}
+  .card.ok{border-left-color:var(--ok)}
+  .card.warn{border-left-color:var(--warn)}
+  .card.fail{border-left-color:var(--alarm); animation:blink 1.2s infinite}
+  .card.sincopia{border-left-color:var(--nobkp)}
+  .card.exento{border-left-color:var(--off); opacity:.62}
+  @keyframes blink{50%{background:#3b1f2b}}
+  .card-h{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px}
+  .card-h h2{font-size:1.05rem; font-weight:700; text-transform:uppercase; letter-spacing:.02em; word-break:break-word}
+  .status{font-size:.75rem; font-weight:700; white-space:nowrap}
+  .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.fail{color:var(--alarm)}
+  .status.sincopia{color:var(--nobkp)} .status.exento,.status.unknown{color:var(--off)}
+  .big{background:var(--card2); border-radius:10px; padding:8px 12px 10px; margin-bottom:8px}
+  .label{font-size:.66rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em}
+  .value{font-size:1.65rem; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums}
+  .value small{font-size:.55em; font-weight:500; color:var(--muted)}
+  .v-ok{color:var(--ok)} .v-warn{color:var(--warn)} .v-alarm{color:var(--alarm)} .v-nobkp{color:var(--nobkp)}
+  .rows{font-size:.78rem; color:var(--muted); display:grid; gap:2px}
+  .rows b{color:var(--text); font-weight:600}
+  .tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:9px}
+  .tag{font-size:.66rem; padding:2px 9px; border-radius:99px; background:var(--card2);
+       border:1px solid #334155; color:var(--muted); text-transform:uppercase; letter-spacing:.03em}
+  .tag.on{color:var(--ok); border-color:rgba(34,197,94,.45)}
+
+  /* ---------- grafico y tabla ---------- */
+  h3{font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+     margin:26px 0 10px; font-weight:600}
+  .panel{background:var(--card); border-radius:12px; padding:14px 16px}
+  .chartwrap{position:relative; height:210px}
+  .tablebox{background:var(--card); border-radius:12px; overflow:auto; max-height:460px}
+  table{border-collapse:collapse; width:100%; font-size:.8rem}
+  th{position:sticky; top:0; background:var(--card2); text-align:left; padding:10px 12px; cursor:pointer;
+     font-size:.66rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+     border-bottom:1px solid #334155; white-space:nowrap}
+  td{padding:9px 12px; border-bottom:1px solid #1f2b3d; vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .errtxt{color:var(--alarm); font-size:.72rem; margin-top:3px; max-width:430px}
+  .empty{padding:26px; text-align:center; color:var(--muted)}
+  footer{color:var(--muted); font-size:.7rem; margin-top:26px; text-align:center}
+
+  /* ================= MODO TV ================= */
+  body.tv{padding:10px 12px; overflow:hidden}
+  body.tv header{margin-bottom:8px}
+  body.tv h1{font-size:1.1rem}
+  body.tv .btns .btn{padding:4px 9px; font-size:.72rem}
+  body.tv .tools, body.tv #jobsPanel, body.tv #chartPanel, body.tv footer,
+  body.tv h3, body.tv #banner{display:none}
+  body.tv #kpis{gap:6px; margin-bottom:8px}
+  body.tv .kpi{padding:5px 12px; min-width:0}
+  body.tv .kpi .n{font-size:clamp(1.2rem,2.2vw,2.6rem)}
+  body.tv .kpi .l{font-size:clamp(.55rem,.75vw,.9rem)}
+  body.tv .cards{display:grid; gap:8px; grid-auto-rows:1fr; align-content:stretch}
+  body.tv .card{min-height:0; overflow:hidden; padding:8px 11px; justify-content:center}
+  body.tv .card-h{margin-bottom:4px}
+  body.tv .card-h h2{font-size:clamp(1rem,1.5vw,2.1rem)}
+  body.tv .status{font-size:clamp(.6rem,.8vw,1rem)}
+  body.tv .big{padding:4px 9px; margin-bottom:5px}
+  body.tv .label{font-size:clamp(.55rem,.8vw,1rem)}
+  body.tv .value{font-size:clamp(1.3rem,2.4vw,3.4rem)}
+  body.tv .rows{font-size:clamp(.6rem,.85vw,1.05rem)}
+  body.tv .tags{margin-top:5px}
+  body.tv .tag{font-size:clamp(.55rem,.7vw,.85rem)}
+
+  /* ===== Overlay de sin conexion ===== */
+  #offline-overlay{position:fixed; inset:0; z-index:9999; display:none;
+    flex-direction:column; align-items:center; justify-content:center; text-align:center;
+    background:rgba(8,12,24,.96)}
+  #offline-overlay.show{display:flex}
+  .ov-inner{animation:ovpulse 1.5s ease-in-out infinite}
+  .ov-icon{font-size:clamp(4rem,13vh,11rem); line-height:1; color:var(--alarm)}
+  .ov-title{font-size:clamp(2.4rem,9vw,8rem); font-weight:900; color:var(--alarm);
+    letter-spacing:.06em; margin:.1em 0 .05em}
+  .ov-sub{font-size:clamp(1rem,2.6vw,2.2rem); color:var(--muted); margin-bottom:.5em}
+  .ov-timer{font-size:clamp(2.2rem,7vw,6rem); font-weight:800; color:#e2e8f0;
+    font-variant-numeric:tabular-nums; letter-spacing:.04em}
+  @keyframes ovpulse{50%{opacity:.5}}
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex; align-items:center; gap:14px">
+    <img id="logo" src="/logo" alt="" style="height:42px; display:none; background:#fff; border-radius:8px; padding:3px 8px"
+         onload="this.style.display='block'">
+    <h1>Copias y máquinas virtuales — <span id="hsub">Azure</span></h1>
+  </div>
+  <div class="btns">
+    <button class="btn" id="bAlert" onclick="toggleAlerts()">🔔 Alertas: OFF</button>
+    <button class="btn" id="bTV" onclick="toggleTV()">🖥️ Modo TV</button>
+    <button class="btn" onclick="location.href='/csv'">⬇ CSV</button>
+    <button class="btn" onclick="cargar(true)">⟳ Actualizar</button>
+  </div>
+  <div id="clock">--:--:--</div>
+</header>
+
+<div id="banner"></div>
+<div id="kpis"></div>
+
+<div class="tools">
+  <input type="search" id="q" placeholder="Filtrar por nombre o grupo de recursos…">
+  <select id="f">
+    <option value="">Todas</option>
+    <option value="problema">Con incidencia</option>
+    <option value="sincopia">Sin copia de seguridad</option>
+    <option value="ok">Correctas</option>
+    <option value="exento">Exentas</option>
+  </select>
+  <span class="count" id="count"></span>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<h3 id="h3chart">Jobs de copia por día</h3>
+<div class="panel" id="chartPanel"><div class="chartwrap"><canvas id="chart"></canvas></div></div>
+
+<h3 id="h3jobs">Histórico de jobs</h3>
+<div id="jobsPanel">
+  <div class="tools">
+    <input type="search" id="qj" placeholder="Filtrar por máquina u operación…">
+    <select id="fj">
+      <option value="">Todos los estados</option>
+      <option value="fail">Solo fallidos</option>
+      <option value="ok">Solo correctos</option>
+    </select>
+    <span class="count" id="jcount"></span>
+  </div>
+  <div class="tablebox">
+    <table id="jobs">
+      <thead><tr>
+        <th data-k="name">Máquina</th><th data-k="operation">Operación</th>
+        <th data-k="status">Estado</th><th data-k="type">Tipo</th>
+        <th data-k="start_time">Inicio</th><th data-k="duration_s">Duración</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<footer id="foot"></footer>
+
+<div id="offline-overlay">
+  <div class="ov-inner">
+    <div class="ov-icon">⚠</div>
+    <div class="ov-title">SIN CONEXIÓN</div>
+    <div class="ov-sub">No se recibe respuesta del servidor</div>
+    <div class="ov-timer" id="ov-timer">00:00:00</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const REFRESH_S = 60;          // sondeo del endpoint
+const STALE_MIN = 90;          // aviso si el colector lleva mas de esto sin correr
+
+let DATA = null;
+let alertsOn = localStorage.getItem("alertsOn") === "1";
+let prevBad = {};
+let lastOk = Date.now();
+let audioCtx = null;
+let chart = null;
+let sortKey = "start_time", sortDir = -1;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ETIQ = {ok:"✔ OK", warn:"⚠ ATENCIÓN", fail:"✖ FALLO", sincopia:"◆ SIN COPIA",
+              exento:"— EXENTA", unknown:"? SIN DATOS"};
+
+const fmt = ts => { if(!ts) return "—";
+  const d = new Date(ts); if(isNaN(d)) return "—";
+  return d.toLocaleString("es-ES",{day:"2-digit",month:"2-digit",year:"2-digit",hour:"2-digit",minute:"2-digit"}); };
+const ago = ts => { if(!ts) return "";
+  const h = (Date.now() - new Date(ts)) / 36e5; if(isNaN(h)) return "";
+  return h < 1 ? "hace " + Math.round(h*60) + " min" : h < 48 ? "hace " + Math.round(h) + " h"
+       : "hace " + Math.round(h/24) + " días"; };
+const dur = s => s == null ? "—" : s < 60 ? Math.round(s)+" s"
+      : s < 3600 ? Math.round(s/60)+" min" : (s/3600).toFixed(1)+" h";
+const jobState = s => { s = (s||"").toLowerCase();
+  if(s.includes("fail") || s.includes("error")) return "fail";
+  if(s.includes("progress")) return "warn";
+  if(s.includes("complet") || s.includes("success")) return "ok";
+  return "unknown"; };
+const tipo = t => String(t).replace("AzureIaasVM","VM Azure").replace("AzureStorage","Azure Files");
+
+/* ---------- alertas ---------- */
+function beep(){
+  if(!alertsOn) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.frequency.value = 880; g.gain.value = .15;
+    o.start(); o.stop(audioCtx.currentTime + .4);
+  }catch(e){}
+}
+function notify(title, body){
+  if(!alertsOn || !("Notification" in window)) return;
+  if(Notification.permission === "granted") new Notification(title, {body});
+}
+function toggleAlerts(){
+  alertsOn = !alertsOn;
+  localStorage.setItem("alertsOn", alertsOn ? "1" : "0");
+  if(alertsOn && "Notification" in window && Notification.permission === "default")
+    Notification.requestPermission();
+  if(alertsOn) beep();
+  paintAlertBtn();
+}
+function paintAlertBtn(){
+  const b = $("bAlert");
+  b.textContent = "🔔 Alertas: " + (alertsOn ? "ON" : "OFF");
+  b.classList.toggle("active", alertsOn);
+}
+
+/* ---------- modo TV ---------- */
+function toggleTV(){
+  document.body.classList.toggle("tv");
+  const on = document.body.classList.contains("tv");
+  $("bTV").classList.toggle("active", on);
+  if(on) document.documentElement.requestFullscreen?.().catch(()=>{});
+  else if(document.fullscreenElement) document.exitFullscreen();
+  fitTV();
+}
+function fitTV(){
+  const c = $("cards");
+  c.style.height = ""; c.style.gridTemplateColumns = "";
+  if(!document.body.classList.contains("tv")) return;
+  const header = document.querySelector("header");
+  const alto = window.innerHeight - header.offsetHeight - $("kpis").offsetHeight - 26;
+  c.style.height = alto + "px";
+  const n = c.children.length || 1;
+  // rejilla lo mas cuadrada posible que quepa en pantalla
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n * (window.innerWidth / Math.max(alto,1)))));
+  c.style.gridTemplateColumns = `repeat(${Math.min(cols, n)}, 1fr)`;
+}
+window.addEventListener("resize", fitTV);
+
+/* ---------- overlay ---------- */
+function updateOverlay(){
+  const secs = Math.floor((Date.now() - lastOk) / 1000);
+  const caido = secs > REFRESH_S * 3;
+  $("offline-overlay").classList.toggle("show", caido && document.body.classList.contains("tv"));
+  const h = String(Math.floor(secs/3600)).padStart(2,"0");
+  const m = String(Math.floor(secs%3600/60)).padStart(2,"0");
+  const s = String(secs%60).padStart(2,"0");
+  $("ov-timer").textContent = `${h}:${m}:${s}`;
+  if(caido && !document.body.classList.contains("tv")){
+    $("banner").className = "show bad";
+    $("banner").innerHTML = "<b>Sin conexión con el servidor.</b> Último dato recibido " + ago(lastOk) + ".";
+  }
+}
+
+/* ---------- carga ---------- */
+async function cargar(manual){
+  try{
+    const r = await fetch("/api/data?t=" + Date.now(), {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    DATA = await r.json();
+    lastOk = Date.now();
+    $("offline-overlay").classList.remove("show");
+    pintar();
+  }catch(e){
+    if(manual) alert("No se pudo contactar con el servidor: " + e.message);
+  }
+  updateOverlay();
+}
+
+/* ---------- pintado ---------- */
+function pintar(){
+  const d = DATA; if(!d) return;
+
+  $("hsub").textContent = (d.vaults||[]).map(v=>v.name).join(", ") || "Azure";
+
+  // --- avisos ---
+  const edadMin = (Date.now() - new Date(d.generated_at)) / 60000;
+  let bannerHtml = "", bannerClass = "";
+  const fallos = (d.items||[]).filter(i => i.state === "fail");
+  const atencion = (d.items||[]).filter(i => i.state === "warn");
+  const sin = (d.items||[]).filter(i => i.state === "sincopia");
+
+  if(d.demo) bannerHtml += "<b>Modo demo.</b> Datos de ejemplo, no reflejan el entorno real.<br>";
+  if(edadMin > STALE_MIN){
+    bannerClass = "bad";
+    bannerHtml += `<b>Datos obsoletos.</b> La última recogida fue ${ago(d.generated_at)}. Revisa el timer del colector.<br>`;
+  }
+  if(fallos.length){ bannerClass = "bad";
+    bannerHtml += "<b>Copias con fallo (" + fallos.length + "):</b> " +
+      fallos.map(i => esc(i.name)).join(", ") + "<br>"; }
+  if(sin.length) bannerHtml += "<b>Máquinas sin copia de seguridad (" + sin.length + "):</b> " +
+      sin.map(i => esc(i.name)).join(", ") + "<br>";
+  if((d.collector_errors||[]).length){ bannerClass = "bad";
+    bannerHtml += "<b>Errores del colector:</b><ul>" +
+      d.collector_errors.map(e => "<li>" + esc(e) + "</li>").join("") + "</ul>"; }
+
+  $("banner").className = bannerHtml ? "show " + bannerClass : "";
+  $("banner").innerHTML = bannerHtml;
+
+  // --- alertas sonoras en las transiciones ---
+  (d.items||[]).forEach(i => {
+    const malo = i.state === "fail" || i.state === "sincopia";
+    if(malo && prevBad[i.name] === false){
+      beep();
+      notify(i.state === "fail" ? "⚠ Copia fallida — " + i.name : "◆ Sin copia — " + i.name,
+             i.last_backup_status || i.resource_group);
+    }
+    prevBad[i.name] = malo;
+  });
+
+  // --- KPIs ---
+  const c = d.counts || {};
+  $("kpis").innerHTML = [
+    ["", d.total_vms||0, "VMs"],
+    ["", d.vms_encendidas||0, "Encendidas"],
+    ["ok", d.vms_protegidas||0, "Con copia"],
+    ["nobkp", c.sincopia||0, "Sin copia"],
+    ["warn", c.warn||0, "Atención"],
+    ["alarm", c.fail||0, "Con fallo"],
+    ["alarm", d.failed_jobs||0, "Jobs fallidos"]
+  ].map(([k,n,l]) => `<div class="kpi ${k}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+
+  pintarCards();
+  pintarChart();
+  pintarJobs();
+
+  const extras = [];
+  if(d.huerfanos) extras.push(d.huerfanos + " copia(s) de VMs eliminadas, ocultas");
+  if((d.ignore_patterns||[]).length) extras.push("exentas: " + d.ignore_patterns.join(", "));
+  $("foot").textContent = "Recogida " + fmt(d.generated_at) + " (" + ago(d.generated_at) + ")" +
+    " · aviso si se superan " + d.sla_hours + " h sin copia correcta" +
+    (extras.length ? " · " + extras.join(" · ") : "");
+}
+
+function pintarCards(){
+  const d = DATA;
+  const term = $("q").value.toLowerCase(), filtro = $("f").value;
+  const rows = (d.items||[]).filter(i => {
+    if(term && !((i.name + " " + i.resource_group).toLowerCase().includes(term))) return false;
+    if(filtro === "problema") return ["fail","warn","sincopia"].includes(i.state);
+    if(filtro) return i.state === filtro;
+    return true;
+  });
+  $("count").textContent = rows.length + " de " + (d.items||[]).length;
+
+  $("cards").innerHTML = rows.length ? rows.map(i => {
+    const vclass = {ok:"v-ok", warn:"v-warn", fail:"v-alarm", sincopia:"v-nobkp"}[i.state] || "";
+    const encendida = i.power_state === "running";
+    const principal = i.protected
+      ? `<div class="label">Último backup</div>
+         <div class="value ${vclass}">${esc(i.last_backup_status || "—")}
+           <small>${i.last_backup_time ? ago(i.last_backup_time) : ""}</small></div>`
+      : `<div class="label">Protección</div>
+         <div class="value ${vclass}">${i.state === "exento" ? "Exenta" : "Sin copia"}</div>`;
+    return `<div class="card ${i.state}">
+      <div class="card-h">
+        <h2>${esc(i.name)}</h2>
+        <span class="status ${i.state}">${ETIQ[i.state] || ""}</span>
+      </div>
+      <div class="big">${principal}</div>
+      <div class="rows">
+        ${i.protected ? `<div>${fmt(i.last_backup_time)}</div>` : ""}
+        <div>${esc(i.resource_group)}${i.location ? " · " + esc(i.location) : ""}</div>
+        ${i.protection_state && i.protection_state !== "Protected"
+          ? `<div><b>Protección: ${esc(i.protection_state)}</b></div>` : ""}
+        ${i.policy ? `<div>Política: ${esc(i.policy)}</div>` : ""}
+      </div>
+      <div class="tags">
+        ${i.kind === "vm" ? `<span class="tag ${encendida ? "on" : ""}">${esc(i.power_state || "estado?")}</span>` : ""}
+        ${i.os ? `<span class="tag">${esc(i.os)}</span>` : ""}
+        ${i.size ? `<span class="tag">${esc(i.size)}</span>` : ""}
+        ${i.kind === "share" ? `<span class="tag">${esc(tipo(i.type))}</span>` : ""}
+      </div>
+    </div>`; }).join("") : '<div class="empty">Sin resultados.</div>';
+
+  fitTV();
+}
+
+function pintarChart(){
+  const d = DATA;
+  const byDay = {};
+  (d.jobs||[]).forEach(j => {
+    if(!j.start_time) return;
+    const k = new Date(j.start_time).toISOString().slice(0,10);
+    byDay[k] = byDay[k] || {ok:0, fail:0};
+    byDay[k][jobState(j.status) === "fail" ? "fail" : "ok"]++;
+  });
+  const days = Object.keys(byDay).sort();
+  if(!window.Chart || !days.length) return;
+  const cfg = {
+    labels: days.map(k => k.slice(8) + "/" + k.slice(5,7)),
+    datasets:[
+      {label:"Correctos", data: days.map(k=>byDay[k].ok), backgroundColor:"#22c55e", borderRadius:4},
+      {label:"Fallidos",  data: days.map(k=>byDay[k].fail), backgroundColor:"#ef4444", borderRadius:4}
+    ]};
+  if(chart){ chart.data = cfg; chart.update(); return; }
+  chart = new Chart($("chart"), {type:"bar", data:cfg,
+    options:{maintainAspectRatio:false, responsive:true,
+      scales:{x:{stacked:true, grid:{display:false}, ticks:{color:"#94a3b8"}},
+              y:{stacked:true, beginAtZero:true, ticks:{precision:0, color:"#94a3b8"},
+                 grid:{color:"#1f2b3d"}}},
+      plugins:{legend:{labels:{color:"#94a3b8", boxWidth:12}}}}});
+}
+
+function pintarJobs(){
+  const d = DATA;
+  const term = $("qj").value.toLowerCase(), only = $("fj").value;
+  let rows = (d.jobs||[]).filter(j =>
+    (!term || (j.name + " " + j.operation + " " + j.status).toLowerCase().includes(term)) &&
+    (!only || jobState(j.status) === only));
+  rows = rows.slice().sort((a,b) => {
+    const x = a[sortKey] ?? "", y = b[sortKey] ?? "";
+    return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+  });
+  $("jcount").textContent = rows.length + " de " + (d.jobs||[]).length + " jobs";
+  document.querySelector("#jobs tbody").innerHTML = rows.length ? rows.map(j => {
+    const st = jobState(j.status);
+    return `<tr>
+      <td>${esc(j.name)}</td><td>${esc(j.operation)}</td>
+      <td><span class="pill ${st === "fail" ? "alarm" : st}">${esc(j.status)}</span>
+          ${(j.errors||[]).length ? `<div class="errtxt">${esc(j.errors.join(" · "))}</div>` : ""}</td>
+      <td>${esc(tipo(j.type))}</td><td>${fmt(j.start_time)}</td><td>${dur(j.duration_s)}</td>
+    </tr>`; }).join("") : '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>';
+}
+
+/* ---------- arranque ---------- */
+document.querySelectorAll("#jobs th").forEach(th => th.onclick = () => {
+  const k = th.dataset.k;
+  sortDir = (k === sortKey) ? -sortDir : -1;
+  sortKey = k; pintarJobs();
+});
+$("q").oninput = pintarCards; $("f").onchange = pintarCards;
+$("qj").oninput = pintarJobs; $("fj").onchange = pintarJobs;
+
+setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("es-ES"); }, 1000);
+setInterval(updateOverlay, 1000);
+setInterval(cargar, REFRESH_S * 1000);
+
+paintAlertBtn();
+cargar();
+</script>
+</body>
+</html>
