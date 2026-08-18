@@ -1,0 +1,29 @@
+[Unit]
+Description=Dashboard de Copias Azure (servidor web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dashboard-copias
+Group=dashboard-copias
+WorkingDirectory=/opt/dashboard-copias-azure
+ExecStart=/usr/bin/python3 /opt/dashboard-copias-azure/serve.py --port 8090 --dir /opt/dashboard-copias-azure/public
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dashboard-copias-azure
+
+# Endurecimiento basico: el servicio solo necesita leer su carpeta y escuchar en un puerto
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/dashboard-copias-azure
+
+[Install]
+WantedBy=multi-user.target

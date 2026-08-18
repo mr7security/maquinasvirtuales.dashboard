@@ -1,24 +1,39 @@
 #!/usr/bin/env bash
-# Instalación del dashboard de Azure Backup en Ubuntu 22.04 / 24.04
+# Instalación del dashboard de copias de Azure en Ubuntu.
+# Sigue el mismo patrón que dashboard-sensores y dashboard-radioenlaces:
+# servicio Python propio bajo /opt, usuario dedicado, systemd. Sin nginx.
+#
 # Ejecutar como root desde el directorio del proyecto:  sudo bash deploy/install.sh
 set -euo pipefail
 
-APP_DIR=/opt/backup-dashboard
-WEB_DIR=/var/www/backup-dashboard
-APP_USER=backupdash
+APP_NAME=dashboard-copias-azure
+APP_DIR=/opt/$APP_NAME
+APP_USER=dashboard-copias
+PORT=8090
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+echo "==> Comprobando que el puerto $PORT está libre"
+if ss -ltn "( sport = :$PORT )" | grep -q LISTEN; then
+    echo "ERROR: el puerto $PORT ya está en uso. Cambia PORT en este script"
+    echo "       y en deploy/$APP_NAME.service antes de continuar."
+    ss -ltnp "( sport = :$PORT )"
+    exit 1
+fi
 
 echo "==> Instalando dependencias del sistema"
 apt-get update -qq
-apt-get install -y python3-venv python3-pip nginx
+apt-get install -y python3-venv python3-pip
 
-echo "==> Creando usuario de servicio"
+echo "==> Creando usuario de servicio $APP_USER"
 id -u "$APP_USER" &>/dev/null || useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
 
 echo "==> Copiando la aplicación a $APP_DIR"
-mkdir -p "$APP_DIR" "$WEB_DIR"
-cp "$SRC_DIR/collect.py" "$SRC_DIR/dashboard_template.html" "$SRC_DIR/requirements.txt" "$APP_DIR/"
-[[ -f "$APP_DIR/.env" ]] || cp "$SRC_DIR/.env.example" "$APP_DIR/.env"
+mkdir -p "$APP_DIR/public"
+install -m 644 "$SRC_DIR/collect.py"              "$APP_DIR/collect.py"
+install -m 644 "$SRC_DIR/serve.py"                "$APP_DIR/serve.py"
+install -m 644 "$SRC_DIR/dashboard_template.html" "$APP_DIR/dashboard_template.html"
+install -m 644 "$SRC_DIR/requirements.txt"        "$APP_DIR/requirements.txt"
+[[ -f "$APP_DIR/.env" ]] || install -m 600 "$SRC_DIR/.env.example" "$APP_DIR/.env"
 
 echo "==> Creando el entorno virtual"
 python3 -m venv "$APP_DIR/venv"
@@ -26,34 +41,34 @@ python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install --quiet -r "$APP_DIR/requirements.txt"
 
 echo "==> Ajustando permisos"
-chown -R "$APP_USER:www-data" "$APP_DIR" "$WEB_DIR"
+chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 chmod 600 "$APP_DIR/.env"
-chmod 755 "$WEB_DIR"
+chmod 750 "$APP_DIR"
 
-echo "==> Instalando el servicio systemd"
-cp "$SRC_DIR/deploy/backup-dashboard.service" /etc/systemd/system/
-cp "$SRC_DIR/deploy/backup-dashboard.timer"   /etc/systemd/system/
+echo "==> Instalando las unidades de systemd"
+install -m 644 "$SRC_DIR/deploy/$APP_NAME.service"             /etc/systemd/system/
+install -m 644 "$SRC_DIR/deploy/$APP_NAME-collector.service"   /etc/systemd/system/
+install -m 644 "$SRC_DIR/deploy/$APP_NAME-collector.timer"     /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now backup-dashboard.timer
-
-echo "==> Instalando la configuración de nginx"
-cp "$SRC_DIR/deploy/nginx-backup-dashboard.conf" /etc/nginx/sites-available/backup-dashboard
-ln -sf /etc/nginx/sites-available/backup-dashboard /etc/nginx/sites-enabled/backup-dashboard
-nginx -t && systemctl reload nginx
+systemctl enable --now "$APP_NAME.service"
+systemctl enable --now "$APP_NAME-collector.timer"
 
 cat <<EOF
 
 -------------------------------------------------------------------
 Instalación terminada.
 
-SIGUIENTE PASO OBLIGATORIO: edita las credenciales
+SIGUIENTE PASO OBLIGATORIO: credenciales del Service Principal
     sudo nano $APP_DIR/.env
 
 Después lanza la primera recogida:
-    sudo systemctl start backup-dashboard.service
-    sudo journalctl -u backup-dashboard.service -n 50
+    sudo systemctl start $APP_NAME-collector.service
+    sudo journalctl -u $APP_NAME-collector -n 50 --no-pager
 
-El dashboard queda en $WEB_DIR/index.html y se sirve por nginx.
-Ajusta 'server_name' en /etc/nginx/sites-available/backup-dashboard.
+Dashboard:      http://\$(hostname -I | awk '{print \$1}'):$PORT
+Estado:         systemctl status $APP_NAME
+Proxima recogida: systemctl list-timers $APP_NAME-collector.timer
+
+Si usais ufw:   sudo ufw allow $PORT/tcp
 -------------------------------------------------------------------
 EOF

@@ -1,0 +1,12 @@
+[Unit]
+Description=Recogida periodica del estado de Azure Backup
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=30min
+RandomizedDelaySec=60s
+Persistent=true
+Unit=dashboard-copias-azure-collector.service
+
+[Install]
+WantedBy=timers.target
