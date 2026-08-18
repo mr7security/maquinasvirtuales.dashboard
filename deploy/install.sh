@@ -21,8 +21,10 @@ if ss -ltn "( sport = :$PORT )" | grep -q LISTEN; then
 fi
 
 echo "==> Instalando dependencias del sistema"
+# En Ubuntu con Python nuevo (3.13/3.14) el paquete venv va versionado
+PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
 apt-get update -qq
-apt-get install -y python3-venv python3-pip
+apt-get install -y python3-pip "python${PYVER}-venv" || apt-get install -y python3-pip python3-venv
 
 echo "==> Creando usuario de servicio $APP_USER"
 id -u "$APP_USER" &>/dev/null || useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
