@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estado de Copias · Azure Backup · Grupo STN</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b22; --panel-2:#1c2330; --border:#2a3140;
+    --txt:#e6edf3; --muted:#8b949e;
+    --ok:#2ea043; --warn:#d29922; --fail:#f85149; --unknown:#6e7681;
+    --accent:#2f81f7;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f4f6fa; --panel:#fff; --panel-2:#f0f3f8; --border:#d8dee9;
+           --txt:#1c2128; --muted:#5b6672; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1400px;margin:0 auto;padding:24px 20px 60px}
+
+  header{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;margin-bottom:20px}
+  h1{font-size:20px;margin:0;font-weight:650;letter-spacing:-.2px}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;
+         font-weight:650;font-size:14px;color:#fff}
+  .badge.ok{background:var(--ok)} .badge.warn{background:var(--warn);color:#231c00}
+  .badge.fail{background:var(--fail)} .badge.unknown{background:var(--unknown)}
+
+  .banner{border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13.5px;
+          border-left:4px solid var(--fail);background:color-mix(in srgb,var(--fail) 12%,var(--panel))}
+  .banner.info{border-left-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
+  .banner ul{margin:6px 0 0;padding-left:20px}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+  .kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .kpi .n{font-size:28px;font-weight:700;line-height:1.1}
+  .kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+  .kpi.ok .n{color:var(--ok)} .kpi.warn .n{color:var(--warn)}
+  .kpi.fail .n{color:var(--fail)} .kpi.unknown .n{color:var(--unknown)}
+
+  h2{font-size:14px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
+     margin:26px 0 12px;font-weight:600}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--unknown);
+        border-radius:10px;padding:14px 16px}
+  .card.ok{border-left-color:var(--ok)} .card.warn{border-left-color:var(--warn)}
+  .card.fail{border-left-color:var(--fail)}
+  .card .top{display:flex;justify-content:space-between;align-items:start;gap:10px}
+  .card .nm{font-weight:650;font-size:14.5px;word-break:break-word}
+  .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;margin-top:5px}
+  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)}
+  .dot.fail{background:var(--fail)} .dot.unknown{background:var(--unknown)}
+  .meta{color:var(--muted);font-size:12px;margin-top:8px;display:grid;gap:3px}
+  .meta b{color:var(--txt);font-weight:600}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  input[type=search],select{background:var(--panel);color:var(--txt);border:1px solid var(--border);
+        border-radius:7px;padding:7px 10px;font-size:13px;font-family:inherit}
+  input[type=search]{min-width:220px}
+
+  .tablebox{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:auto;max-height:520px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th{position:sticky;top:0;background:var(--panel-2);text-align:left;padding:10px 12px;
+     font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+     border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap}
+  td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600}
+  .pill.ok{background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)}
+  .pill.warn{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn)}
+  .pill.fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:var(--fail)}
+  .pill.unknown{background:color-mix(in srgb,var(--unknown) 20%,transparent);color:var(--muted)}
+  .err{color:var(--fail);font-size:12px;margin-top:3px;max-width:420px}
+  .chartbox{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;height:230px}
+  footer{color:var(--muted);font-size:12px;margin-top:34px;text-align:center}
+  .empty{padding:26px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Estado de Copias de Seguridad · Azure Backup</h1>
+      <div class="sub" id="sub">—</div>
+    </div>
+    <div id="overall" class="badge unknown">—</div>
+  </header>
+
+  <div id="alerts"></div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <h2>Estado por elemento protegido</h2>
+  <div class="cards" id="cards"></div>
+
+  <h2>Jobs por día</h2>
+  <div class="chartbox"><canvas id="chart"></canvas></div>
+
+  <h2>Histórico de jobs</h2>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Filtrar por máquina u operación…">
+    <select id="fstatus">
+      <option value="">Todos los estados</option>
+      <option value="fail">Solo fallidos</option>
+      <option value="ok">Solo correctos</option>
+    </select>
+    <span class="sub" id="jobcount"></span>
+  </div>
+  <div class="tablebox">
+    <table id="jobs">
+      <thead><tr>
+        <th data-k="name">Máquina</th>
+        <th data-k="operation">Operación</th>
+        <th data-k="status">Estado</th>
+        <th data-k="type">Tipo</th>
+        <th data-k="start_time">Inicio</th>
+        <th data-k="duration_s">Duración</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const DATA = /*__DATA__*/null;
+
+const LABEL = {ok:'Correcto', warn:'Atención', fail:'Fallo', unknown:'Sin datos'};
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = ts => { if(!ts) return '—';
+  const d = new Date(ts); if(isNaN(d)) return '—';
+  return d.toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+const ago = ts => { if(!ts) return '';
+  const h = (Date.now() - new Date(ts)) / 36e5; if(isNaN(h)) return '';
+  return h < 1 ? 'hace ' + Math.round(h*60) + ' min' : h < 48 ? 'hace ' + Math.round(h) + ' h'
+       : 'hace ' + Math.round(h/24) + ' días'; };
+const dur = s => s == null ? '—' : s < 60 ? Math.round(s)+' s'
+      : s < 3600 ? Math.round(s/60)+' min' : (s/3600).toFixed(1)+' h';
+const jobState = s => { s = (s||'').toLowerCase();
+  if(s.includes('fail') || s.includes('error')) return 'fail';
+  if(s.includes('progress')) return 'warn';
+  if(s.includes('complet') || s.includes('success')) return 'ok';
+  return 'unknown'; };
+
+function render(){
+  if(!DATA){ document.getElementById('alerts').innerHTML =
+    '<div class="banner">Sin datos. Ejecuta <code>python3 collect.py</code>.</div>'; return; }
+
+  const d = DATA;
+
+  document.getElementById('sub').textContent =
+    (d.vaults||[]).map(v=>v.name).join(', ') +
+    ' · ventana de ' + d.window_days + ' días · actualizado ' + fmt(d.generated_at) + ' (' + ago(d.generated_at) + ')';
+
+  const ov = document.getElementById('overall');
+  ov.className = 'badge ' + d.overall;
+  ov.textContent = {ok:'✓ Todo correcto', warn:'⚠ Revisar', fail:'✕ Hay fallos', unknown:'Sin datos'}[d.overall] || '—';
+
+  // --- Avisos ---
+  let alerts = '';
+  if(d.demo) alerts += '<div class="banner info"><b>Modo demo.</b> Datos de ejemplo, no reflejan el entorno real.</div>';
+  const bad = (d.items||[]).filter(i => i.state === 'fail' || i.state === 'warn');
+  if(bad.length) alerts += '<div class="banner"><b>Requieren atención (' + bad.length + '):</b><ul>' +
+    bad.map(i => '<li>' + esc(i.name) + ' — ' + esc(i.last_backup_status || 'sin estado') +
+      (i.last_backup_time ? ', último backup ' + ago(i.last_backup_time) : ', sin backup registrado') + '</li>').join('') +
+    '</ul></div>';
+  if((d.collector_errors||[]).length) alerts += '<div class="banner"><b>Errores del colector:</b><ul>' +
+    d.collector_errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div>';
+  document.getElementById('alerts').innerHTML = alerts;
+
+  // --- KPIs ---
+  const c = d.counts || {};
+  document.getElementById('kpis').innerHTML = [
+    ['ok', c.ok||0, 'Correctos'], ['warn', c.warn||0, 'Atención'],
+    ['fail', c.fail||0, 'Con fallo'], ['', d.total_jobs||0, 'Jobs (' + d.window_days + ' d)'],
+    ['fail', d.failed_jobs||0, 'Jobs fallidos']
+  ].map(([k,n,l]) => '<div class="kpi ' + k + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
+
+  // --- Tarjetas ---
+  const cards = (d.items||[]).map(i => `
+    <div class="card ${i.state}">
+      <div class="top">
+        <div class="nm">${esc(i.name)}</div>
+        <div class="dot ${i.state}" title="${LABEL[i.state]}"></div>
+      </div>
+      <div class="meta">
+        <div>Último backup: <b>${esc(i.last_backup_status || '—')}</b></div>
+        <div>${fmt(i.last_backup_time)} ${i.last_backup_time ? '· ' + ago(i.last_backup_time) : ''}</div>
+        <div>${esc(i.resource_group)} · ${esc(String(i.type).replace('AzureIaasVM','VM Azure').replace('AzureStorage','Azure Files'))}</div>
+        ${i.oldest_recovery_point ? '<div>Punto más antiguo: ' + fmt(i.oldest_recovery_point) + '</div>' : ''}
+        ${i.policy ? '<div>Política: ' + esc(i.policy) + '</div>' : ''}
+      </div>
+    </div>`).join('');
+  document.getElementById('cards').innerHTML = cards || '<div class="empty">Sin elementos protegidos.</div>';
+
+  // --- Gráfico ---
+  const byDay = {};
+  (d.jobs||[]).forEach(j => {
+    if(!j.start_time) return;
+    const k = new Date(j.start_time).toISOString().slice(0,10);
+    byDay[k] = byDay[k] || {ok:0, fail:0};
+    byDay[k][jobState(j.status) === 'fail' ? 'fail' : 'ok']++;
+  });
+  const days = Object.keys(byDay).sort();
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  if(window.Chart && days.length){
+    new Chart(document.getElementById('chart'), {
+      type:'bar',
+      data:{ labels: days.map(k => k.slice(8) + '/' + k.slice(5,7)),
+        datasets:[
+          {label:'Correctos', data: days.map(k=>byDay[k].ok), backgroundColor: css('--ok')},
+          {label:'Fallidos', data: days.map(k=>byDay[k].fail), backgroundColor: css('--fail')}
+        ]},
+      options:{ maintainAspectRatio:false, responsive:true,
+        scales:{ x:{stacked:true, grid:{display:false}, ticks:{color:css('--muted')}},
+                 y:{stacked:true, beginAtZero:true, ticks:{precision:0, color:css('--muted')},
+                    grid:{color:css('--border')}}},
+        plugins:{legend:{labels:{color:css('--muted'), boxWidth:12}}}}
+    });
+  }
+
+  // --- Tabla ---
+  let sortKey = 'start_time', sortDir = -1;
+  const tbody = document.querySelector('#jobs tbody');
+  const q = document.getElementById('q'), fs = document.getElementById('fstatus');
+
+  function draw(){
+    const term = q.value.toLowerCase(), only = fs.value;
+    let rows = (d.jobs||[]).filter(j =>
+      (!term || (j.name+' '+j.operation+' '+j.status).toLowerCase().includes(term)) &&
+      (!only || jobState(j.status) === only));
+    rows = rows.slice().sort((a,b) => {
+      const x = a[sortKey] ?? '', y = b[sortKey] ?? '';
+      return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+    });
+    document.getElementById('jobcount').textContent = rows.length + ' de ' + (d.jobs||[]).length + ' jobs';
+    tbody.innerHTML = rows.length ? rows.map(j => {
+      const st = jobState(j.status);
+      return `<tr>
+        <td>${esc(j.name)}</td>
+        <td>${esc(j.operation)}</td>
+        <td><span class="pill ${st}">${esc(j.status)}</span>
+            ${(j.errors||[]).length ? '<div class="err">' + esc(j.errors.join(' · ')) + '</div>' : ''}</td>
+        <td>${esc(String(j.type).replace('AzureIaasVM','VM Azure').replace('AzureStorage','Azure Files'))}</td>
+        <td>${fmt(j.start_time)}</td>
+        <td>${dur(j.duration_s)}</td>
+      </tr>`; }).join('') : '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>';
+  }
+
+  document.querySelectorAll('#jobs th').forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    sortDir = (k === sortKey) ? -sortDir : -1;
+    sortKey = k; draw();
+  });
+  q.oninput = draw; fs.onchange = draw;
+  draw();
+
+  document.getElementById('foot').textContent =
+    'Generado automáticamente · ' + fmt(d.generated_at) +
+    ' · SLA: aviso si un elemento supera ' + d.sla_hours + ' h sin backup correcto';
+}
+
+render();
+// Recarga la página periódicamente (el colector regenera el HTML por cron)
+setTimeout(() => location.reload(), 15 * 60 * 1000);
+</script>
+</body>
+</html>
