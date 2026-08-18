@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-Colector de estado de Azure Backup -> data.json + index.html
+Colector de estado de maquinas virtuales y copias de Azure -> data.json + index.html
 
-Sustituye la revisión manual del portal (Recovery Services vault -> Backup items
--> View jobs) por un proceso automático que se ejecuta en un servidor Ubuntu.
+Cruza dos fuentes:
+  - Inventario de VMs de la suscripcion (Microsoft.Compute)
+  - Elementos protegidos y jobs de los Recovery Services vaults
+
+De ese cruce sale lo que el portal no ensena de un vistazo: que VMs existen,
+cuales estan respaldadas, cuando fue su ultima copia y cuales no tienen ninguna.
 
 Uso:
     python3 collect.py                 # lee credenciales de .env / entorno
     python3 collect.py --demo          # datos de ejemplo, sin tocar Azure
-    python3 collect.py --days 7        # histórico de jobs de los últimos 7 días
-    python3 collect.py --out /var/www/backup-dashboard
+    python3 collect.py --days 7        # historico de jobs de los ultimos 7 dias
+    python3 collect.py --out /opt/dashboard-copias-azure/public
 
 Requisitos: ver requirements.txt
 """
@@ -17,6 +21,7 @@ Requisitos: ver requirements.txt
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import random
@@ -29,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent
 TEMPLATE = BASE_DIR / "dashboard_template.html"
 
 # --------------------------------------------------------------------------
-# Configuración
+# Configuracion
 # --------------------------------------------------------------------------
 
 
@@ -50,6 +55,10 @@ def env(name: str, default: str | None = None, required: bool = False) -> str | 
     if required and not value:
         sys.exit(f"[ERROR] Falta la variable de entorno {name} (revisa tu .env)")
     return value
+
+
+def env_list(name: str) -> list[str]:
+    return [v.strip() for v in (os.environ.get(name, "") or "").split(",") if v.strip()]
 
 
 # --------------------------------------------------------------------------
@@ -99,7 +108,7 @@ def hours_since(iso_ts: str | None) -> float | None:
     if not iso_ts:
         return None
     try:
-        dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(iso_ts).replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return (datetime.now(timezone.utc) - dt).total_seconds() / 3600
@@ -107,19 +116,59 @@ def hours_since(iso_ts: str | None) -> float | None:
         return None
 
 
-def classify(
+def model_dict(obj) -> dict:
+    """Modelo del SDK -> dict con claves camelCase, o {} si no se puede."""
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return obj
+    for attr in ("as_dict", "serialize"):
+        fn = getattr(obj, attr, None)
+        if callable(fn):
+            try:
+                result = fn()
+                if isinstance(result, dict):
+                    return result
+            except Exception:  # noqa: BLE001
+                pass
+    return {}
+
+
+def pick(data: dict, obj, camel: str, snake: str):
+    """Lee del dict camelCase y, si no esta, del atributo snake_case."""
+    value = data.get(camel)
+    if value in (None, ""):
+        value = getattr(obj, snake, None)
+    return value
+
+
+def parse_rg(resource_id: str) -> str:
+    parts = (resource_id or "").split("/")
+    for label in ("resourceGroups", "resourcegroups"):
+        if label in parts:
+            try:
+                return parts[parts.index(label) + 1]
+            except IndexError:
+                return ""
+    return ""
+
+
+def matches_any(name: str, patterns: list[str]) -> bool:
+    lowered = (name or "").lower()
+    return any(fnmatch.fnmatch(lowered, p.lower()) for p in patterns)
+
+
+def classify_backup(
     last_status: str | None,
     last_ts: str | None,
     sla_hours: float,
     protection_state: str | None = None,
 ) -> str:
-    """Devuelve ok | warn | fail | unknown."""
+    """Estado de la copia: ok | warn | fail | unknown."""
     status = (last_status or "").lower().replace(" ", "")
     state = (protection_state or "").lower().replace(" ", "")
     age = hours_since(last_ts)
 
-    # La proteccion detenida es un aviso por si mismo, aunque la ultima copia
-    # fuese correcta: la maquina ya no se esta respaldando.
     if state in ("protectionstopped", "protectionpaused", "backupsuspended"):
         return "warn"
     if state == "protectionerror":
@@ -136,45 +185,25 @@ def classify(
     return "warn"
 
 
-def model_dict(obj) -> dict:
-    """Modelo del SDK -> dict con claves camelCase (v11) o {} si no se puede."""
-    if obj is None:
-        return {}
-    for attr in ("as_dict", "serialize"):
-        fn = getattr(obj, attr, None)
-        if callable(fn):
-            try:
-                result = fn()
-                if isinstance(result, dict):
-                    return result
-            except Exception:  # noqa: BLE001
-                pass
-    return {}
-
-
-def pick(data: dict, obj, camel: str, snake: str):
-    """Lee una propiedad del dict camelCase y, si no esta, del atributo snake_case."""
-    value = data.get(camel)
-    if value in (None, ""):
-        value = getattr(obj, snake, None)
-    return value
-
-
-def parse_rg(resource_id: str) -> str:
-    parts = (resource_id or "").split("/")
-    try:
-        return parts[parts.index("resourceGroups") + 1]
-    except (ValueError, IndexError):
-        return ""
+def power_state_from(instance_view) -> str:
+    """Extrae 'running' / 'deallocated' / 'stopped' del instance view."""
+    data = model_dict(instance_view)
+    statuses = data.get("statuses") or getattr(instance_view, "statuses", None) or []
+    for status in statuses:
+        code = (model_dict(status).get("code") or getattr(status, "code", "") or "")
+        if str(code).lower().startswith("powerstate/"):
+            return str(code).split("/", 1)[1].lower()
+    return ""
 
 
 # --------------------------------------------------------------------------
-# Recolección real desde Azure
+# Recoleccion real desde Azure
 # --------------------------------------------------------------------------
 
 
 def collect_azure(days: int, sla_hours: float) -> dict:
     from azure.identity import ClientSecretCredential, DefaultAzureCredential
+    from azure.mgmt.compute import ComputeManagementClient
     from azure.mgmt.recoveryservices import RecoveryServicesClient
 
     # A partir de azure-mgmt-recoveryservicesbackup 11 el cliente cuelga
@@ -192,21 +221,26 @@ def collect_azure(days: int, sla_hours: float) -> dict:
     if tenant_id and client_id and client_secret:
         credential = ClientSecretCredential(tenant_id, client_id, client_secret)
     else:
-        # Managed Identity de la VM, o `az login` en el propio servidor
         credential = DefaultAzureCredential()
 
+    compute = ComputeManagementClient(credential, subscription_id)
     rsv_client = RecoveryServicesClient(credential, subscription_id)
     backup_client = RecoveryServicesBackupClient(credential, subscription_id)
 
-    # --- Vaults a monitorizar ---------------------------------------------
-    wanted = [v.strip() for v in (env("AZURE_VAULTS", "") or "").split(",") if v.strip()]
+    ignore_patterns = env_list("VM_IGNORE_PATTERNS")
+    errors: list[str] = []
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=days)
+
+    # ----------------------------------------------------------------------
+    # 1. Elementos protegidos de los vaults, indexados por resource id
+    # ----------------------------------------------------------------------
+    wanted = env_list("AZURE_VAULTS")
     vaults = []
 
-    # azure-mgmt-recoveryservices renombro el metodo entre versiones
     list_vaults = getattr(rsv_client.vaults, "list_by_subscription_id", None) or getattr(
         rsv_client.vaults, "list_by_subscription"
     )
-
     for vault in list_vaults():
         if wanted and vault.name not in wanted:
             continue
@@ -216,20 +250,17 @@ def collect_azure(days: int, sla_hours: float) -> dict:
 
     if not vaults:
         raise RuntimeError(
-            "No se ha encontrado ningún Recovery Services vault accesible. "
+            "No se ha encontrado ningun Recovery Services vault accesible. "
             "Revisa AZURE_SUBSCRIPTION_ID, AZURE_VAULTS y los permisos del service principal."
         )
 
-    items: list[dict] = []
+    backups_by_resource: dict[str, dict] = {}
+    other_protected: list[dict] = []
     jobs: list[dict] = []
-    errors: list[str] = []
-    now = datetime.now(timezone.utc)
-    start = now - timedelta(days=days)
 
     for vault in vaults:
         vname, vrg = vault["name"], vault["resource_group"]
 
-        # --- Backup items: estado actual por máquina -----------------------
         try:
             for item in backup_client.backup_protected_items.list(vname, vrg):
                 p = item.properties
@@ -239,8 +270,8 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                 last_status = pick(d, p, "lastBackupStatus", "last_backup_status")
                 last_time = iso(pick(d, p, "lastBackupTime", "last_backup_time"))
                 protection_state = pick(d, p, "protectionState", "protection_state")
+                mgmt = pick(d, p, "backupManagementType", "backup_management_type")
 
-                # Azure Files no expone lastBackupStatus
                 if not last_status:
                     last_status = pick(d, p, "protectionStatus", "protection_status") or pick(
                         d, p, "healthStatus", "health_status"
@@ -248,29 +279,45 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                 if not last_time:
                     last_time = iso(pick(d, p, "lastRecoveryPoint", "last_recovery_point"))
 
-                source_id = pick(d, p, "sourceResourceId", "source_resource_id") or ""
-                mgmt = pick(d, p, "backupManagementType", "backup_management_type")
-
-                items.append(
-                    {
-                        "vault": vname,
-                        "resource_group": parse_rg(str(source_id)) or vrg,
-                        "name": str(friendly),
-                        "type": str(mgmt) if mgmt else "Unknown",
-                        "protection_state": str(protection_state or ""),
-                        "health": str(pick(d, p, "healthStatus", "health_status") or ""),
-                        "policy": str(pick(d, p, "policyName", "policy_name") or ""),
-                        "last_backup_status": str(last_status or ""),
-                        "last_backup_time": last_time,
-                        "oldest_recovery_point": iso(pick(d, p, "oldestRecoveryPoint", "oldest_recovery_point")),
-                        "last_recovery_point": iso(pick(d, p, "lastRecoveryPoint", "last_recovery_point")),
-                        "state": classify(last_status, last_time, sla_hours, protection_state),
-                    }
+                source_id = str(
+                    pick(d, p, "virtualMachineId", "virtual_machine_id")
+                    or pick(d, p, "sourceResourceId", "source_resource_id")
+                    or ""
                 )
+
+                record = {
+                    "vault": vname,
+                    "name": str(friendly),
+                    "type": str(mgmt or "Unknown"),
+                    "protection_state": str(protection_state or ""),
+                    "health": str(pick(d, p, "healthStatus", "health_status") or ""),
+                    "policy": str(pick(d, p, "policyName", "policy_name") or ""),
+                    "last_backup_status": str(last_status or ""),
+                    "last_backup_time": last_time,
+                    "oldest_recovery_point": iso(pick(d, p, "oldestRecoveryPoint", "oldest_recovery_point")),
+                    "last_recovery_point": iso(pick(d, p, "lastRecoveryPoint", "last_recovery_point")),
+                    "backup_state": classify_backup(last_status, last_time, sla_hours, protection_state),
+                }
+
+                if source_id:
+                    backups_by_resource[source_id.lower()] = record
+                else:
+                    # Azure Files y demas cargas no ligadas a una VM
+                    record.update(
+                        {
+                            "kind": "share",
+                            "resource_group": parse_rg(
+                                str(pick(d, p, "sourceResourceId", "source_resource_id") or "")
+                            )
+                            or vrg,
+                            "state": record["backup_state"],
+                            "protected": True,
+                        }
+                    )
+                    other_protected.append(record)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"Items de {vname}: {exc}")
 
-        # --- Backup jobs: histórico ----------------------------------------
         try:
             fmt = "%Y-%m-%d %I:%M:%S %p"
             job_filter = f"startTime eq '{start.strftime(fmt)}' and endTime eq '{now.strftime(fmt)}'"
@@ -279,8 +326,7 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                 d = model_dict(p)
 
                 details = []
-                raw_errors = d.get("errorDetails") or getattr(p, "error_details", None) or []
-                for err in raw_errors:
+                for err in d.get("errorDetails") or getattr(p, "error_details", None) or []:
                     if isinstance(err, dict):
                         msg = err.get("errorString") or err.get("errorTitle")
                     else:
@@ -304,7 +350,75 @@ def collect_azure(days: int, sla_hours: float) -> dict:
         except Exception as exc:  # noqa: BLE001
             errors.append(f"Jobs de {vname}: {exc}")
 
-    return build_payload(vaults, items, jobs, days, sla_hours, errors)
+    # ----------------------------------------------------------------------
+    # 2. Inventario de VMs, cruzado con lo anterior
+    # ----------------------------------------------------------------------
+    items: list[dict] = []
+
+    try:
+        try:
+            vm_list = list(compute.virtual_machines.list_all(status_only="true"))
+        except TypeError:
+            vm_list = list(compute.virtual_machines.list_all())
+
+        for vm in vm_list:
+            d = model_dict(vm)
+            vm_id = str(getattr(vm, "id", "") or d.get("id") or "")
+            name = str(getattr(vm, "name", "") or d.get("name") or "")
+
+            hardware = d.get("hardwareProfile") or {}
+            storage = d.get("storageProfile") or {}
+            os_disk = storage.get("osDisk") or {}
+
+            power = power_state_from(getattr(vm, "instance_view", None) or d.get("instanceView"))
+            if not power:
+                try:
+                    view = compute.virtual_machines.instance_view(parse_rg(vm_id), name)
+                    power = power_state_from(view)
+                except Exception:  # noqa: BLE001
+                    power = ""
+
+            backup = backups_by_resource.pop(vm_id.lower(), None)
+            ignored = matches_any(name, ignore_patterns)
+
+            if backup:
+                state = backup["backup_state"]
+            elif ignored:
+                state = "exento"
+            else:
+                state = "sincopia"
+
+            items.append(
+                {
+                    "kind": "vm",
+                    "name": name,
+                    "resource_group": parse_rg(vm_id),
+                    "location": str(getattr(vm, "location", "") or d.get("location") or ""),
+                    "power_state": power,
+                    "os": str(os_disk.get("osType") or ""),
+                    "size": str(hardware.get("vmSize") or ""),
+                    "protected": backup is not None,
+                    "state": state,
+                    "vault": backup["vault"] if backup else "",
+                    "policy": backup["policy"] if backup else "",
+                    "protection_state": backup["protection_state"] if backup else "",
+                    "health": backup["health"] if backup else "",
+                    "last_backup_status": backup["last_backup_status"] if backup else "",
+                    "last_backup_time": backup["last_backup_time"] if backup else None,
+                    "oldest_recovery_point": backup["oldest_recovery_point"] if backup else None,
+                    "last_recovery_point": backup["last_recovery_point"] if backup else None,
+                    "type": backup["type"] if backup else "AzureIaasVM",
+                }
+            )
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"Inventario de VMs: {exc}")
+
+    # Lo que queda en backups_by_resource son copias de VMs que ya no existen.
+    # Por decision de diseno no se muestran, solo se cuentan.
+    orphans = len(backups_by_resource)
+
+    items.extend(other_protected)
+    return build_payload(vaults, items, jobs, days, sla_hours, errors, orphans, ignore_patterns)
 
 
 # --------------------------------------------------------------------------
@@ -314,77 +428,99 @@ def collect_azure(days: int, sla_hours: float) -> dict:
 
 def collect_demo(days: int, sla_hours: float) -> dict:
     vaults = [{"name": "STNCERAMICA-backup", "resource_group": "rg_backup", "location": "westeurope"}]
-    machines = [
-        ("vmproaddc1", "rg_ad"),
-        ("vmproadrds01", "rg_ad"),
-        ("vmpregscasql01", "rg_pre_gscash"),
-        ("vmprocitrxapp02", "rg_pro_citrix"),
-        ("vmproctxdlvf01", "rg_pro_citrix"),
-        ("vmproctxstrf01", "rg_pro_citrix"),
-        ("vmprogscasql01", "rg_pro_gscash"),
-    ]
     now = datetime.now(timezone.utc)
+    ignore_patterns = ["sgp-dev*", "sgp-pruebas*"]
+
+    plantilla = [
+        ("vmproaddc1", "rg_ad", "running", "Windows", "Standard_B1ms", True, "Completed", 14),
+        ("vmproadrds01", "rg_ad", "running", "Windows", "Standard_B2s", True, "Completed", 14),
+        ("vmprocitrxapp02", "rg_pro_citrix", "running", "Windows", "Standard_D4s_v3", True, "Failed", 14),
+        ("AVDVM-0", "rg_network", "running", "Windows", "Standard_B2s", False, "", 0),
+        ("VDI-0", "VDITest-deployment", "deallocated", "Windows", "Standard_D2as_v5", False, "", 0),
+        ("sgp-dev18-1", "sgp-dev18", "running", "Windows", "Standard_B8ms", False, "", 0),
+        ("sgp-dev19-1", "sgp-dev19", "deallocated", "Windows", "Standard_B8ms", False, "", 0),
+        ("sgp-pruebas1-1", "sgp-pruebas1", "deallocated", "Windows", "Standard_B8ms", False, "", 0),
+    ]
+
     items: list[dict] = []
     jobs: list[dict] = []
 
-    for idx, (name, rg) in enumerate(machines):
-        broken = name == "vmproctxdlvf01"
-        stale = name == "vmpregscasql01"
-        last = now - timedelta(hours=38 if stale else random.uniform(3, 12))
-        status = "Failed" if broken else "Completed"
+    for name, rg, power, so, size, protegida, status, horas in plantilla:
+        last = iso(now - timedelta(hours=horas)) if protegida else None
+        if protegida:
+            state = classify_backup(status, last, sla_hours)
+        elif matches_any(name, ignore_patterns):
+            state = "exento"
+        else:
+            state = "sincopia"
+
         items.append(
             {
-                "vault": "STNCERAMICA-backup",
-                "resource_group": rg,
+                "kind": "vm",
                 "name": name,
-                "type": "AzureIaasVM",
-                "protection_state": "Protected",
-                "health": "Unhealthy" if broken else "Passed",
-                "policy": "DefaultPolicy",
+                "resource_group": rg,
+                "location": "westeurope",
+                "power_state": power,
+                "os": so,
+                "size": size,
+                "protected": protegida,
+                "state": state,
+                "vault": "STNCERAMICA-backup" if protegida else "",
+                "policy": "Dailypolicy" if protegida else "",
+                "protection_state": "Protected" if protegida else "",
+                "health": "Passed" if protegida else "",
                 "last_backup_status": status,
-                "last_backup_time": iso(last),
-                "oldest_recovery_point": iso(now - timedelta(days=30 - idx)),
-                "last_recovery_point": iso(last),
-                "state": classify(status, iso(last), sla_hours),
+                "last_backup_time": last,
+                "oldest_recovery_point": iso(now - timedelta(days=30)) if protegida else None,
+                "last_recovery_point": last,
+                "type": "AzureIaasVM",
             }
         )
-        for d in range(days):
-            start = now - timedelta(days=d, hours=random.uniform(0, 3))
-            failed = broken and d < 2
-            jobs.append(
-                {
-                    "vault": "STNCERAMICA-backup",
-                    "name": name,
-                    "operation": "Backup",
-                    "status": "Failed" if failed else "Completed",
-                    "type": "AzureIaasVM",
-                    "start_time": iso(start),
-                    "end_time": iso(start + timedelta(minutes=random.randint(8, 45))),
-                    "duration_s": random.randint(500, 2700),
-                    "errors": ["UserErrorGuestAgentStatusUnavailable: el agente de la VM no responde."]
-                    if failed
-                    else [],
-                }
-            )
+
+        if protegida:
+            for d in range(days):
+                inicio = now - timedelta(days=d, hours=random.uniform(0, 3))
+                fallo = status == "Failed" and d < 2
+                jobs.append(
+                    {
+                        "vault": "STNCERAMICA-backup",
+                        "name": name,
+                        "operation": "Backup",
+                        "status": "Failed" if fallo else "Completed",
+                        "type": "AzureIaasVM",
+                        "start_time": iso(inicio),
+                        "end_time": iso(inicio + timedelta(minutes=random.randint(8, 45))),
+                        "duration_s": random.randint(500, 2700),
+                        "errors": ["UserErrorGuestAgentStatusUnavailable: el agente de la VM no responde."]
+                        if fallo
+                        else [],
+                    }
+                )
 
     items.append(
         {
-            "vault": "STNCERAMICA-backup",
-            "resource_group": "rg_backup",
+            "kind": "share",
             "name": "informatica (integracion365fo)",
-            "type": "AzureStorage",
+            "resource_group": "rg_backup",
+            "location": "westeurope",
+            "power_state": "",
+            "os": "",
+            "size": "",
+            "protected": True,
+            "state": "ok",
+            "vault": "STNCERAMICA-backup",
+            "policy": "Dailypolicy",
             "protection_state": "Protected",
             "health": "Passed",
-            "policy": "DailyPolicy",
             "last_backup_status": "Completed",
-            "last_backup_time": iso(now - timedelta(hours=6)),
+            "last_backup_time": iso(now - timedelta(hours=9)),
             "oldest_recovery_point": iso(now - timedelta(days=30)),
-            "last_recovery_point": iso(now - timedelta(hours=6)),
-            "state": "ok",
+            "last_recovery_point": iso(now - timedelta(hours=9)),
+            "type": "AzureStorage",
         }
     )
 
-    payload = build_payload(vaults, items, jobs, days, sla_hours, [])
+    payload = build_payload(vaults, items, jobs, days, sla_hours, [], 4, ignore_patterns)
     payload["demo"] = True
     return payload
 
@@ -393,21 +529,25 @@ def collect_demo(days: int, sla_hours: float) -> dict:
 # Payload + render
 # --------------------------------------------------------------------------
 
+ORDEN_ESTADO = {"fail": 0, "sincopia": 1, "warn": 2, "unknown": 3, "exento": 4, "ok": 5}
 
-def build_payload(vaults, items, jobs, days, sla_hours, errors) -> dict:
+
+def build_payload(vaults, items, jobs, days, sla_hours, errors, orphans, ignore_patterns) -> dict:
     jobs.sort(key=lambda j: j.get("start_time") or "", reverse=True)
-    items.sort(key=lambda i: (i.get("state") != "fail", i.get("state") != "warn", i.get("name", "")))
+    items.sort(key=lambda i: (ORDEN_ESTADO.get(i.get("state"), 9), i.get("name", "").lower()))
 
-    failed_jobs = [j for j in jobs if classify(j.get("status"), None, sla_hours) == "fail"]
+    failed_jobs = [j for j in jobs if classify_backup(j.get("status"), None, sla_hours) == "fail"]
 
-    counts = {"ok": 0, "warn": 0, "fail": 0, "unknown": 0}
+    counts = {"ok": 0, "warn": 0, "fail": 0, "sincopia": 0, "exento": 0, "unknown": 0}
     for item in items:
         state = item.get("state", "unknown")
         counts[state] = counts.get(state, 0) + 1
 
+    vms = [i for i in items if i.get("kind") == "vm"]
+
     if counts["fail"] or failed_jobs:
         overall = "fail"
-    elif counts["warn"] or counts["unknown"]:
+    elif counts["sincopia"] or counts["warn"] or counts["unknown"]:
         overall = "warn"
     else:
         overall = "ok"
@@ -423,6 +563,11 @@ def build_payload(vaults, items, jobs, days, sla_hours, errors) -> dict:
         "jobs": jobs,
         "failed_jobs": len(failed_jobs),
         "total_jobs": len(jobs),
+        "total_vms": len(vms),
+        "vms_encendidas": len([v for v in vms if v.get("power_state") == "running"]),
+        "vms_protegidas": len([v for v in vms if v.get("protected")]),
+        "huerfanos": orphans,
+        "ignore_patterns": ignore_patterns,
         "collector_errors": errors,
         "demo": False,
     }
@@ -437,8 +582,6 @@ def render(payload: dict, out_dir: Path) -> None:
     if not TEMPLATE.exists():
         sys.exit(f"[ERROR] No se encuentra la plantilla {TEMPLATE}")
 
-    # El JSON se incrusta en el HTML -> fichero autocontenido, sin fetch ni CORS.
-    # Se escapa "</" y los separadores U+2028/U+2029 para no romper el <script>.
     inline = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     inline = inline.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
@@ -450,7 +593,7 @@ def render(payload: dict, out_dir: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Dashboard de estado de Azure Backup")
+    parser = argparse.ArgumentParser(description="Dashboard de VMs y copias de Azure")
     parser.add_argument("--demo", action="store_true", help="Datos de ejemplo, sin conectar a Azure")
     parser.add_argument("--days", type=int, default=int(os.environ.get("BACKUP_DAYS", "7")))
     parser.add_argument("--sla-hours", type=float, default=float(os.environ.get("BACKUP_SLA_HOURS", "26")))
@@ -472,12 +615,17 @@ def main() -> int:
             "window_days": args.days,
             "sla_hours": args.sla_hours,
             "overall": "fail",
-            "counts": {"ok": 0, "warn": 0, "fail": 0, "unknown": 0},
+            "counts": {"ok": 0, "warn": 0, "fail": 0, "sincopia": 0, "exento": 0, "unknown": 0},
             "vaults": [],
             "items": [],
             "jobs": [],
             "failed_jobs": 0,
             "total_jobs": 0,
+            "total_vms": 0,
+            "vms_encendidas": 0,
+            "vms_protegidas": 0,
+            "huerfanos": 0,
+            "ignore_patterns": [],
             "collector_errors": [f"El colector no pudo ejecutarse: {exc}"],
             "demo": False,
         }
@@ -487,9 +635,10 @@ def main() -> int:
     render(payload, Path(args.out))
     print(
         f"OK -> {args.out}/index.html | estado={payload['overall']} | "
-        f"items={len(payload['items'])} jobs={payload['total_jobs']} fallidos={payload['failed_jobs']}"
+        f"VMs={payload['total_vms']} protegidas={payload['vms_protegidas']} "
+        f"sin copia={payload['counts']['sincopia']} | jobs={payload['total_jobs']} "
+        f"fallidos={payload['failed_jobs']} | huerfanos ocultos={payload['huerfanos']}"
     )
-    # Código de salida != 0 si hay fallos -> enganchable a monitorización externa
     return 2 if payload["overall"] == "fail" else 0
 
 

@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Estado de Copias · Azure Backup · Grupo STN</title>
+<title>Maquinas virtuales y copias · Azure · Grupo STN</title>
 <style>
   :root{
     --bg:#0e1117; --panel:#161b22; --panel-2:#1c2330; --border:#2a3140;
     --txt:#e6edf3; --muted:#8b949e;
-    --ok:#2ea043; --warn:#d29922; --fail:#f85149; --unknown:#6e7681;
-    --accent:#2f81f7;
+    --ok:#2ea043; --warn:#d29922; --fail:#f85149; --sincopia:#a371f7;
+    --exento:#6e7681; --unknown:#6e7681; --accent:#2f81f7;
   }
   @media (prefers-color-scheme: light){
     :root{ --bg:#f4f6fa; --panel:#fff; --panel-2:#f0f3f8; --border:#d8dee9;
-           --txt:#1c2128; --muted:#5b6672; }
+           --txt:#1c2128; --muted:#5b6672; --sincopia:#8250df; }
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);
        font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-  .wrap{max-width:1400px;margin:0 auto;padding:24px 20px 60px}
+  .wrap{max-width:1500px;margin:0 auto;padding:24px 20px 60px}
 
   header{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;margin-bottom:20px}
   h1{font-size:20px;margin:0;font-weight:650;letter-spacing:-.2px}
@@ -28,40 +28,48 @@
   .badge.ok{background:var(--ok)} .badge.warn{background:var(--warn);color:#231c00}
   .badge.fail{background:var(--fail)} .badge.unknown{background:var(--unknown)}
 
-  .banner{border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13.5px;
+  .banner{border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13.5px;
           border-left:4px solid var(--fail);background:color-mix(in srgb,var(--fail) 12%,var(--panel))}
+  .banner.morada{border-left-color:var(--sincopia);background:color-mix(in srgb,var(--sincopia) 12%,var(--panel))}
   .banner.info{border-left-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
-  .banner ul{margin:6px 0 0;padding-left:20px}
+  .banner ul{margin:6px 0 0;padding-left:20px;columns:2;column-gap:28px}
 
-  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px}
   .kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
   .kpi .n{font-size:28px;font-weight:700;line-height:1.1}
   .kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
   .kpi.ok .n{color:var(--ok)} .kpi.warn .n{color:var(--warn)}
-  .kpi.fail .n{color:var(--fail)} .kpi.unknown .n{color:var(--unknown)}
+  .kpi.fail .n{color:var(--fail)} .kpi.sincopia .n{color:var(--sincopia)}
 
   h2{font-size:14px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
      margin:26px 0 12px;font-weight:600}
 
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-  .card{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--unknown);
-        border-radius:10px;padding:14px 16px}
-  .card.ok{border-left-color:var(--ok)} .card.warn{border-left-color:var(--warn)}
-  .card.fail{border-left-color:var(--fail)}
-  .card .top{display:flex;justify-content:space-between;align-items:start;gap:10px}
-  .card .nm{font-weight:650;font-size:14.5px;word-break:break-word}
-  .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;margin-top:5px}
-  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)}
-  .dot.fail{background:var(--fail)} .dot.unknown{background:var(--unknown)}
-  .meta{color:var(--muted);font-size:12px;margin-top:8px;display:grid;gap:3px}
-  .meta b{color:var(--txt);font-weight:600}
-
-  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
   input[type=search],select{background:var(--panel);color:var(--txt);border:1px solid var(--border);
         border-radius:7px;padding:7px 10px;font-size:13px;font-family:inherit}
   input[type=search]{min-width:220px}
 
-  .tablebox{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:auto;max-height:520px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--unknown);
+        border-radius:10px;padding:13px 15px}
+  .card.ok{border-left-color:var(--ok)} .card.warn{border-left-color:var(--warn)}
+  .card.fail{border-left-color:var(--fail)} .card.sincopia{border-left-color:var(--sincopia)}
+  .card.exento{border-left-color:var(--exento);opacity:.72}
+  .card .top{display:flex;justify-content:space-between;align-items:start;gap:10px}
+  .card .nm{font-weight:650;font-size:14.5px;word-break:break-word}
+  .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;margin-top:5px}
+  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)}
+  .dot.fail{background:var(--fail)} .dot.sincopia{background:var(--sincopia)}
+  .dot.exento,.dot.unknown{background:var(--exento)}
+  .meta{color:var(--muted);font-size:12px;margin-top:7px;display:grid;gap:3px}
+  .meta b{color:var(--txt);font-weight:600}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+  .tag{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--panel-2);
+       border:1px solid var(--border);color:var(--muted)}
+  .tag.on{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--border))}
+  .tag.off{color:var(--muted)}
+
+  .tablebox{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:auto;max-height:500px}
   table{border-collapse:collapse;width:100%;font-size:13px}
   th{position:sticky;top:0;background:var(--panel-2);text-align:left;padding:10px 12px;
      font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
@@ -83,25 +91,35 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>Estado de Copias de Seguridad · Azure Backup</h1>
+      <h1>Maquinas virtuales y copias de seguridad · Azure</h1>
       <div class="sub" id="sub">—</div>
     </div>
     <div id="overall" class="badge unknown">—</div>
   </header>
 
   <div id="alerts"></div>
-
   <div class="kpis" id="kpis"></div>
 
-  <h2>Estado por elemento protegido</h2>
+  <h2>Maquinas virtuales y elementos protegidos</h2>
+  <div class="toolbar">
+    <input type="search" id="qi" placeholder="Filtrar por nombre o grupo de recursos…">
+    <select id="fi">
+      <option value="">Todos</option>
+      <option value="problema">Solo con incidencia</option>
+      <option value="sincopia">Sin copia de seguridad</option>
+      <option value="ok">Correctos</option>
+      <option value="exento">Exentos</option>
+    </select>
+    <span class="sub" id="icount"></span>
+  </div>
   <div class="cards" id="cards"></div>
 
-  <h2>Jobs por día</h2>
+  <h2>Jobs de copia por dia</h2>
   <div class="chartbox"><canvas id="chart"></canvas></div>
 
-  <h2>Histórico de jobs</h2>
+  <h2>Historico de jobs</h2>
   <div class="toolbar">
-    <input type="search" id="q" placeholder="Filtrar por máquina u operación…">
+    <input type="search" id="q" placeholder="Filtrar por maquina u operacion…">
     <select id="fstatus">
       <option value="">Todos los estados</option>
       <option value="fail">Solo fallidos</option>
@@ -112,12 +130,12 @@
   <div class="tablebox">
     <table id="jobs">
       <thead><tr>
-        <th data-k="name">Máquina</th>
-        <th data-k="operation">Operación</th>
+        <th data-k="name">Maquina</th>
+        <th data-k="operation">Operacion</th>
         <th data-k="status">Estado</th>
         <th data-k="type">Tipo</th>
         <th data-k="start_time">Inicio</th>
-        <th data-k="duration_s">Duración</th>
+        <th data-k="duration_s">Duracion</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -130,7 +148,8 @@
 <script>
 const DATA = /*__DATA__*/null;
 
-const LABEL = {ok:'Correcto', warn:'Atención', fail:'Fallo', unknown:'Sin datos'};
+const LABEL = {ok:'Correcto', warn:'Atencion', fail:'Fallo', sincopia:'Sin copia',
+               exento:'Exento', unknown:'Sin datos'};
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = ts => { if(!ts) return '—';
   const d = new Date(ts); if(isNaN(d)) return '—';
@@ -138,7 +157,7 @@ const fmt = ts => { if(!ts) return '—';
 const ago = ts => { if(!ts) return '';
   const h = (Date.now() - new Date(ts)) / 36e5; if(isNaN(h)) return '';
   return h < 1 ? 'hace ' + Math.round(h*60) + ' min' : h < 48 ? 'hace ' + Math.round(h) + ' h'
-       : 'hace ' + Math.round(h/24) + ' días'; };
+       : 'hace ' + Math.round(h/24) + ' dias'; };
 const dur = s => s == null ? '—' : s < 60 ? Math.round(s)+' s'
       : s < 3600 ? Math.round(s/60)+' min' : (s/3600).toFixed(1)+' h';
 const jobState = s => { s = (s||'').toLowerCase();
@@ -146,6 +165,7 @@ const jobState = s => { s = (s||'').toLowerCase();
   if(s.includes('progress')) return 'warn';
   if(s.includes('complet') || s.includes('success')) return 'ok';
   return 'unknown'; };
+const tipo = t => String(t).replace('AzureIaasVM','VM Azure').replace('AzureStorage','Azure Files');
 
 function render(){
   if(!DATA){ document.getElementById('alerts').innerHTML =
@@ -155,20 +175,26 @@ function render(){
 
   document.getElementById('sub').textContent =
     (d.vaults||[]).map(v=>v.name).join(', ') +
-    ' · ventana de ' + d.window_days + ' días · actualizado ' + fmt(d.generated_at) + ' (' + ago(d.generated_at) + ')';
+    ' · ventana de ' + d.window_days + ' dias · actualizado ' + fmt(d.generated_at) + ' (' + ago(d.generated_at) + ')';
 
   const ov = document.getElementById('overall');
   ov.className = 'badge ' + d.overall;
-  ov.textContent = {ok:'✓ Todo correcto', warn:'⚠ Revisar', fail:'✕ Hay fallos', unknown:'Sin datos'}[d.overall] || '—';
+  ov.textContent = {ok:'Todo correcto', warn:'Revisar', fail:'Hay fallos', unknown:'Sin datos'}[d.overall] || '—';
 
   // --- Avisos ---
   let alerts = '';
   if(d.demo) alerts += '<div class="banner info"><b>Modo demo.</b> Datos de ejemplo, no reflejan el entorno real.</div>';
-  const bad = (d.items||[]).filter(i => i.state === 'fail' || i.state === 'warn');
-  if(bad.length) alerts += '<div class="banner"><b>Requieren atención (' + bad.length + '):</b><ul>' +
-    bad.map(i => '<li>' + esc(i.name) + ' — ' + esc(i.last_backup_status || 'sin estado') +
-      (i.last_backup_time ? ', último backup ' + ago(i.last_backup_time) : ', sin backup registrado') + '</li>').join('') +
+
+  const fallos = (d.items||[]).filter(i => i.state === 'fail' || i.state === 'warn');
+  if(fallos.length) alerts += '<div class="banner"><b>Copias que requieren atencion (' + fallos.length + '):</b><ul>' +
+    fallos.map(i => '<li>' + esc(i.name) + ' — ' + esc(i.last_backup_status || 'sin estado') +
+      (i.last_backup_time ? ', ' + ago(i.last_backup_time) : '') + '</li>').join('') + '</ul></div>';
+
+  const sin = (d.items||[]).filter(i => i.state === 'sincopia');
+  if(sin.length) alerts += '<div class="banner morada"><b>Maquinas sin copia de seguridad (' + sin.length + '):</b><ul>' +
+    sin.map(i => '<li>' + esc(i.name) + ' <span style="opacity:.7">· ' + esc(i.resource_group) + '</span></li>').join('') +
     '</ul></div>';
+
   if((d.collector_errors||[]).length) alerts += '<div class="banner"><b>Errores del colector:</b><ul>' +
     d.collector_errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div>';
   document.getElementById('alerts').innerHTML = alerts;
@@ -176,30 +202,59 @@ function render(){
   // --- KPIs ---
   const c = d.counts || {};
   document.getElementById('kpis').innerHTML = [
-    ['ok', c.ok||0, 'Correctos'], ['warn', c.warn||0, 'Atención'],
-    ['fail', c.fail||0, 'Con fallo'], ['', d.total_jobs||0, 'Jobs (' + d.window_days + ' d)'],
+    ['', d.total_vms||0, 'VMs totales'],
+    ['', d.vms_encendidas||0, 'Encendidas'],
+    ['ok', d.vms_protegidas||0, 'Con copia'],
+    ['sincopia', c.sincopia||0, 'Sin copia'],
+    ['warn', c.warn||0, 'Atencion'],
+    ['fail', c.fail||0, 'Con fallo'],
     ['fail', d.failed_jobs||0, 'Jobs fallidos']
   ].map(([k,n,l]) => '<div class="kpi ' + k + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>').join('');
 
   // --- Tarjetas ---
-  const cards = (d.items||[]).map(i => `
-    <div class="card ${i.state}">
-      <div class="top">
-        <div class="nm">${esc(i.name)}</div>
-        <div class="dot ${i.state}" title="${LABEL[i.state]}"></div>
-      </div>
-      <div class="meta">
-        <div>Último backup: <b>${esc(i.last_backup_status || '—')}</b></div>
-        <div>${fmt(i.last_backup_time)} ${i.last_backup_time ? '· ' + ago(i.last_backup_time) : ''}</div>
-        <div>${esc(i.resource_group)} · ${esc(String(i.type).replace('AzureIaasVM','VM Azure').replace('AzureStorage','Azure Files'))}</div>
-        ${i.protection_state && i.protection_state !== 'Protected' ? '<div><b>Protección: ' + esc(i.protection_state) + '</b></div>' : ''}
-        ${i.oldest_recovery_point ? '<div>Punto más antiguo: ' + fmt(i.oldest_recovery_point) + '</div>' : ''}
-        ${i.policy ? '<div>Política: ' + esc(i.policy) + '</div>' : ''}
-      </div>
-    </div>`).join('');
-  document.getElementById('cards').innerHTML = cards || '<div class="empty">Sin elementos protegidos.</div>';
+  const qi = document.getElementById('qi'), fi = document.getElementById('fi');
 
-  // --- Gráfico ---
+  function dibujaCards(){
+    const term = qi.value.toLowerCase(), filtro = fi.value;
+    const rows = (d.items||[]).filter(i => {
+      if(term && !((i.name+' '+i.resource_group).toLowerCase().includes(term))) return false;
+      if(filtro === 'problema') return i.state === 'fail' || i.state === 'warn' || i.state === 'sincopia';
+      if(filtro) return i.state === filtro;
+      return true;
+    });
+    document.getElementById('icount').textContent = rows.length + ' de ' + (d.items||[]).length;
+    document.getElementById('cards').innerHTML = rows.length ? rows.map(i => {
+      const encendida = i.power_state === 'running';
+      return `
+      <div class="card ${i.state}">
+        <div class="top">
+          <div class="nm">${esc(i.name)}</div>
+          <div class="dot ${i.state}" title="${LABEL[i.state]||''}"></div>
+        </div>
+        <div class="meta">
+          ${i.protected
+            ? '<div>Ultimo backup: <b>' + esc(i.last_backup_status || '—') + '</b></div>' +
+              '<div>' + fmt(i.last_backup_time) + (i.last_backup_time ? ' · ' + ago(i.last_backup_time) : '') + '</div>'
+            : '<div><b>' + (i.state === 'exento' ? 'Exenta de copia' : 'Sin copia de seguridad') + '</b></div>'}
+          <div>${esc(i.resource_group)}${i.location ? ' · ' + esc(i.location) : ''}</div>
+          ${i.protection_state && i.protection_state !== 'Protected'
+            ? '<div><b>Proteccion: ' + esc(i.protection_state) + '</b></div>' : ''}
+          ${i.policy ? '<div>Politica: ' + esc(i.policy) + '</div>' : ''}
+        </div>
+        <div class="tags">
+          ${i.kind === 'vm'
+            ? '<span class="tag ' + (encendida ? 'on' : 'off') + '">' +
+              (i.power_state ? esc(i.power_state) : 'estado desconocido') + '</span>' : ''}
+          ${i.os ? '<span class="tag">' + esc(i.os) + '</span>' : ''}
+          ${i.size ? '<span class="tag">' + esc(i.size) + '</span>' : ''}
+          ${i.kind === 'share' ? '<span class="tag">' + tipo(i.type) + '</span>' : ''}
+        </div>
+      </div>`; }).join('') : '<div class="empty">Sin resultados.</div>';
+  }
+  qi.oninput = dibujaCards; fi.onchange = dibujaCards;
+  dibujaCards();
+
+  // --- Grafico ---
   const byDay = {};
   (d.jobs||[]).forEach(j => {
     if(!j.start_time) return;
@@ -225,7 +280,7 @@ function render(){
     });
   }
 
-  // --- Tabla ---
+  // --- Tabla de jobs ---
   let sortKey = 'start_time', sortDir = -1;
   const tbody = document.querySelector('#jobs tbody');
   const q = document.getElementById('q'), fs = document.getElementById('fstatus');
@@ -247,7 +302,7 @@ function render(){
         <td>${esc(j.operation)}</td>
         <td><span class="pill ${st}">${esc(j.status)}</span>
             ${(j.errors||[]).length ? '<div class="err">' + esc(j.errors.join(' · ')) + '</div>' : ''}</td>
-        <td>${esc(String(j.type).replace('AzureIaasVM','VM Azure').replace('AzureStorage','Azure Files'))}</td>
+        <td>${esc(tipo(j.type))}</td>
         <td>${fmt(j.start_time)}</td>
         <td>${dur(j.duration_s)}</td>
       </tr>`; }).join('') : '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>';
@@ -261,13 +316,16 @@ function render(){
   q.oninput = draw; fs.onchange = draw;
   draw();
 
+  const extras = [];
+  if(d.huerfanos) extras.push(d.huerfanos + ' copia(s) de VMs ya eliminadas, ocultas');
+  if((d.ignore_patterns||[]).length) extras.push('exentas: ' + d.ignore_patterns.join(', '));
   document.getElementById('foot').textContent =
-    'Generado automáticamente · ' + fmt(d.generated_at) +
-    ' · SLA: aviso si un elemento supera ' + d.sla_hours + ' h sin backup correcto';
+    'Generado automaticamente · ' + fmt(d.generated_at) +
+    ' · aviso si se superan ' + d.sla_hours + ' h sin copia correcta' +
+    (extras.length ? ' · ' + extras.join(' · ') : '');
 }
 
 render();
-// Recarga la página periódicamente (el colector regenera el HTML por cron)
 setTimeout(() => location.reload(), 15 * 60 * 1000);
 </script>
 </body>
