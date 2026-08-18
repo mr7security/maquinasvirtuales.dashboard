@@ -49,33 +49,59 @@ usa `--scopes` apuntando al resource group del vault en lugar de a la suscripci�
 
 ## 2. Instalar en el servidor Ubuntu
 
+Sigue el mismo patrón que el resto de dashboards de la máquina (`dashboard-sensores`,
+`dashboard-radioenlaces`): servicio Python propio bajo `/opt`, usuario dedicado y
+systemd. **No usa nginx.**
+
 ```bash
-# En el servidor
 sudo apt install -y git
-git clone https://github.com/<usuario>/azure-backup-dashboard.git
-cd azure-backup-dashboard
+git clone https://github.com/mr7security/maquinasvirtuales.dashboard.git
+cd maquinasvirtuales.dashboard
 sudo bash deploy/install.sh
 
 # Rellena las credenciales
-sudo nano /opt/backup-dashboard/.env
+sudo nano /opt/dashboard-copias-azure/.env
 
 # Primera recogida
-sudo systemctl start backup-dashboard.service
-sudo journalctl -u backup-dashboard.service -n 50
+sudo systemctl start dashboard-copias-azure-collector.service
+sudo journalctl -u dashboard-copias-azure-collector -n 50 --no-pager
 ```
 
-El instalador crea el usuario de servicio `backupdash`, el virtualenv, el timer de
-systemd (cada 30 min) y el site de nginx.
+El instalador crea el usuario `dashboard-copias`, el virtualenv, el servicio web
+y el timer de recogida (cada 30 min). Aborta si el puerto 8090 está ocupado.
+
+### Puertos en uso en la máquina
+
+| Puerto | Servicio |
+|---|---|
+| 8000 | `dashboard-sensores` |
+| 8080 | `dashboard-radioenlaces` |
+| 8090 | `dashboard-copias-azure` (este) |
+
+Para cambiarlo, edita `PORT` en `deploy/install.sh` y `--port` en
+`deploy/dashboard-copias-azure.service`.
 
 ## 3. Comprobar
 
 ```bash
-systemctl list-timers backup-dashboard.timer   # próxima ejecución
-curl -s localhost/data.json | head -40         # datos en crudo
+systemctl status dashboard-copias-azure
+systemctl list-timers dashboard-copias-azure-collector.timer
+curl -s localhost:8090/data.json | head -40
 ```
 
-El dashboard se sirve en `http://<servidor>/`. Edita `server_name` y el bloque
-`allow/deny` en `/etc/nginx/sites-available/backup-dashboard` para tu red.
+El dashboard queda en `http://<servidor>:8090`.
+
+## Arquitectura
+
+Dos unidades de systemd, separadas a propósito:
+
+- `dashboard-copias-azure.service` — servidor web (`serve.py`), siempre activo,
+  `Restart=always`. Solo sirve ficheros estáticos, no habla con Azure.
+- `dashboard-copias-azure-collector.timer` — dispara `collect.py` cada 30 min,
+  que consulta Azure y regenera `public/index.html` y `public/data.json`.
+
+Si Azure no responde, el dashboard sigue en pie mostrando el último dato bueno y
+un banner con el error.
 
 ---
 
@@ -115,16 +141,18 @@ Equivalen a las variables `BACKUP_DAYS`, `BACKUP_SLA_HOURS` y `OUTPUT_DIR` del `
 ## Estructura
 
 ```
-azure-backup-dashboard/
+maquinasvirtuales.dashboard/
 ├── collect.py                  Colector: Azure SDK -> data.json + index.html
+├── serve.py                    Servidor web (solo libreria estandar)
 ├── dashboard_template.html     Plantilla (el JSON se inyecta en el HTML)
 ├── requirements.txt
 ├── .env.example
+├── .gitignore
 └── deploy/
-    ├── install.sh              Instalador para Ubuntu
-    ├── backup-dashboard.service
-    ├── backup-dashboard.timer  Cada 30 min
-    └── nginx-backup-dashboard.conf
+    ├── install.sh                                Instalador para Ubuntu
+    ├── dashboard-copias-azure.service            Servidor web, siempre activo
+    ├── dashboard-copias-azure-collector.service  Recogida (oneshot)
+    └── dashboard-copias-azure-collector.timer    Cada 30 min
 ```
 
 El HTML resultante es autocontenido: el JSON va incrustado, así que no hay llamadas
@@ -134,7 +162,7 @@ quieres consumirlo desde otro sistema.
 ## Si prefieres cron en vez de systemd
 
 ```cron
-*/30 * * * * cd /opt/backup-dashboard && ./venv/bin/python collect.py >> /var/log/backup-dashboard.log 2>&1
+*/30 * * * * cd /opt/dashboard-copias-azure && ./venv/bin/python collect.py --out ./public >> /var/log/dashboard-copias-azure.log 2>&1
 ```
 
 ## Siguientes pasos posibles
