@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+public/
+data.json
+index.html
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.log
