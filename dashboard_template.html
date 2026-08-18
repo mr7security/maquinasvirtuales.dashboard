@@ -192,6 +192,7 @@ function render(){
         <div>Último backup: <b>${esc(i.last_backup_status || '—')}</b></div>
         <div>${fmt(i.last_backup_time)} ${i.last_backup_time ? '· ' + ago(i.last_backup_time) : ''}</div>
         <div>${esc(i.resource_group)} · ${esc(String(i.type).replace('AzureIaasVM','VM Azure').replace('AzureStorage','Azure Files'))}</div>
+        ${i.protection_state && i.protection_state !== 'Protected' ? '<div><b>Protección: ' + esc(i.protection_state) + '</b></div>' : ''}
         ${i.oldest_recovery_point ? '<div>Punto más antiguo: ' + fmt(i.oldest_recovery_point) + '</div>' : ''}
         ${i.policy ? '<div>Política: ' + esc(i.policy) + '</div>' : ''}
       </div>
