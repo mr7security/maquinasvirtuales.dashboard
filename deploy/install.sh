@@ -12,10 +12,14 @@ APP_USER=dashboard-copias
 PORT=8090
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+echo "==> Parando el servicio si ya estaba instalado (reinstalacion)"
+systemctl stop "$APP_NAME.service" 2>/dev/null || true
+sleep 1
+
 echo "==> Comprobando que el puerto $PORT está libre"
 if ss -ltn "( sport = :$PORT )" | grep -q LISTEN; then
-    echo "ERROR: el puerto $PORT ya está en uso. Cambia PORT en este script"
-    echo "       y en deploy/$APP_NAME.service antes de continuar."
+    echo "ERROR: el puerto $PORT lo ocupa otro proceso ajeno a este dashboard."
+    echo "       Cambia PORT en este script y --port en deploy/$APP_NAME.service."
     ss -ltnp "( sport = :$PORT )"
     exit 1
 fi
@@ -31,10 +35,12 @@ id -u "$APP_USER" &>/dev/null || useradd --system --home "$APP_DIR" --shell /usr
 
 echo "==> Copiando la aplicación a $APP_DIR"
 mkdir -p "$APP_DIR/public"
-install -m 644 "$SRC_DIR/collect.py"              "$APP_DIR/collect.py"
-install -m 644 "$SRC_DIR/serve.py"                "$APP_DIR/serve.py"
-install -m 644 "$SRC_DIR/dashboard_template.html" "$APP_DIR/dashboard_template.html"
-install -m 644 "$SRC_DIR/requirements.txt"        "$APP_DIR/requirements.txt"
+install -m 644 "$SRC_DIR/collect.py"       "$APP_DIR/collect.py"
+install -m 644 "$SRC_DIR/serve.py"         "$APP_DIR/serve.py"
+install -m 644 "$SRC_DIR/dashboard.html"   "$APP_DIR/dashboard.html"
+install -m 644 "$SRC_DIR/requirements.txt" "$APP_DIR/requirements.txt"
+rm -f "$APP_DIR/dashboard_template.html" "$APP_DIR/public/index.html"
+if [[ -f "$SRC_DIR/logo.png" ]]; then install -m 644 "$SRC_DIR/logo.png" "$APP_DIR/logo.png"; fi
 [[ -f "$APP_DIR/.env" ]] || install -m 600 "$SRC_DIR/.env.example" "$APP_DIR/.env"
 
 echo "==> Creando el entorno virtual"
