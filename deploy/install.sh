@@ -35,7 +35,8 @@ id -u "$APP_USER" &>/dev/null || useradd --system --home "$APP_DIR" --shell /usr
 
 echo "==> Copiando la aplicación a $APP_DIR"
 mkdir -p "$APP_DIR/public"
-install -m 644 "$SRC_DIR/collect.py"       "$APP_DIR/collect.py"
+install -m 644 "$SRC_DIR/collect.py"          "$APP_DIR/collect.py"
+install -m 644 "$SRC_DIR/collect_runbooks.py" "$APP_DIR/collect_runbooks.py"
 install -m 644 "$SRC_DIR/serve.py"         "$APP_DIR/serve.py"
 install -m 644 "$SRC_DIR/dashboard.html"   "$APP_DIR/dashboard.html"
 install -m 644 "$SRC_DIR/requirements.txt" "$APP_DIR/requirements.txt"
