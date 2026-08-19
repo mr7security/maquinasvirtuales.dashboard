@@ -105,17 +105,26 @@ def texto_intervalo(horas: float) -> str:
     return f"{horas / 24:.0f} días"
 
 
-def intervalo_habitual(ejecuciones: list[dict]) -> tuple[float | None, int]:
-    """Horas que suelen pasar entre una ejecucion y la siguiente (mediana).
+def intervalo_habitual(ejecuciones: list[dict]) -> tuple[float | None, float | None, int]:
+    """Cadencia del proceso: (mediana, limite, numero de ejecuciones), en horas.
 
-    Se mide el intervalo y no la hora del dia a proposito. Un proceso puede
-    correr una vez al dia, dos, o cada pocas horas —Process_AS_Finanzas se
-    ejecuta a las 23:00 y a las 08:06—, y una unica "hora habitual" no
-    describe esos casos. El intervalo vale para cualquier cadencia.
+    Se mide el intervalo entre ejecuciones y no la hora del dia a proposito.
+    Un proceso puede correr una vez al dia, dos, o cada pocas horas, y una
+    unica "hora habitual" no describe esos casos.
+
+    Se devuelven dos cifras porque cumplen funciones distintas:
+
+      mediana -> describe la cadencia, es lo que se muestra
+      limite  -> percentil 90, es lo que decide el aviso
+
+    La diferencia importa cuando los intervalos alternan. Process_AS_Finanzas
+    corre a las 23:00 y a las 08:06: sus huecos son de 9 y 15 horas alternos.
+    Avisar a las 9 daria un falso positivo cada tarde; el percentil 90 recoge
+    el hueco largo y solo salta cuando de verdad se ha saltado una pasada.
 
     Se deduce de las ejecuciones reales en lugar de las programaciones de Azure
-    porque en esta cuenta hay runbooks que se disparan desde fuera de Automation
-    y no tienen programacion vinculada.
+    porque hay runbooks que se disparan desde fuera de Automation y no tienen
+    programacion vinculada.
     """
     tiempos = []
     for e in ejecuciones:
@@ -127,13 +136,16 @@ def intervalo_habitual(ejecuciones: list[dict]) -> tuple[float | None, int]:
             continue
 
     if len(tiempos) < 3:
-        return None, len(tiempos)
+        return None, None, len(tiempos)
 
     tiempos.sort()
     huecos = sorted((b - a).total_seconds() / 3600 for a, b in zip(tiempos, tiempos[1:]))
     if not huecos:
-        return None, len(tiempos)
-    return huecos[len(huecos) // 2], len(tiempos)
+        return None, None, len(tiempos)
+
+    mediana = huecos[len(huecos) // 2]
+    indice = min(len(huecos) - 1, round((len(huecos) - 1) * 0.9))
+    return mediana, huecos[indice], len(tiempos)
 
 
 def clasificar(job: dict | None, esperada: str | None) -> str:
@@ -322,16 +334,17 @@ def collect_azure(dias: int) -> dict:
         # ¿Cuando deberia haber corrido por ultima vez?
         # Fuente principal: la hora a la que se ejecuta de verdad.
         esperada, horario_txt, origen = None, "", ""
-        intervalo, muestras = intervalo_habitual(ejecuciones)
+        mediana, limite, muestras = intervalo_habitual(ejecuciones)
 
-        if intervalo is not None and (ultima or {}).get("inicio"):
+        if limite is not None and (ultima or {}).get("inicio"):
             try:
                 arranque = datetime.fromisoformat(str(ultima["inicio"]).replace("Z", "+00:00"))
-                esperada = arranque + timedelta(hours=intervalo)
+                esperada = arranque + timedelta(hours=limite)
                 origen = "historico"
                 horario_txt = (
-                    f"cada ~{texto_intervalo(intervalo)} "
-                    f"(mediana de {muestras} ejecuciones)"
+                    f"cada ~{texto_intervalo(mediana)} · aviso si supera "
+                    f"{texto_intervalo(limite + MARGEN_HORAS)} "
+                    f"({muestras} ejecuciones)"
                 )
             except ValueError:
                 esperada = None

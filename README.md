@@ -222,8 +222,23 @@ advertencias reales. Un runbook `Completed` con un error dentro sale en rojo, co
 texto del error en la propia tarjeta.
 
 Y detecta algo que la revisión manual no ve: un runbook que **no se ha ejecutado**.
-Para saber cuándo debería haberlo hecho lee las programaciones configuradas en la
-cuenta de Automation, así que se adapta solo si cambiáis los horarios.
+
+Para saber cuándo debería haberlo hecho mide el **intervalo entre ejecuciones
+reales**, no las programaciones de Azure. La razón es empírica: tres de los cinco
+runbooks se disparan desde fuera de Automation y no tienen programación vinculada.
+
+Se calculan dos cifras a partir del histórico:
+
+- **la mediana** describe la cadencia y es lo que se muestra
+- **el percentil 90** decide el aviso
+
+Esa distinción importa cuando los intervalos alternan. `Process_AS_Finanzas` corre
+a las 23:00 y a las 08:06, así que sus huecos son de 9 y 15 horas alternos: avisar
+a las 9 daría un falso positivo cada tarde. El percentil 90 recoge el hueco largo y
+solo salta cuando de verdad se ha saltado una pasada.
+
+Si un proceso tiene menos de tres ejecuciones registradas, se recurre a la
+programación de Azure como respaldo.
 
 Configuración en el `.env`:
 
