@@ -16,6 +16,10 @@
   h1{font-size:1.3rem; font-weight:600; text-transform:uppercase; letter-spacing:.03em}
   h1 span{color:var(--accent)}
   #clock{font-size:1.05rem; color:var(--muted); font-variant-numeric:tabular-nums}
+  #meta{font-size:.72rem; color:var(--muted); line-height:1.5; text-align:right}
+  #meta b{color:var(--text); font-weight:600}
+  #meta .alerta{color:var(--warn); font-weight:600}
+  #meta .critico{color:var(--alarm); font-weight:700}
   .btn{background:var(--card); color:var(--text); border:1px solid var(--linea); border-radius:8px;
        padding:7px 13px; font-size:.85rem; cursor:pointer; text-transform:uppercase; letter-spacing:.02em}
   .btn:hover{border-color:var(--accent)}
@@ -151,7 +155,8 @@
   tr:last-child td{border-bottom:none}
   .errtxt{color:var(--alarm); font-size:.72rem; margin-top:3px; max-width:430px}
   .empty{padding:26px; text-align:center; color:var(--muted)}
-  footer{color:var(--muted); font-size:.7rem; margin-top:26px; text-align:center}
+  footer{color:var(--muted); font-size:.72rem; margin-top:30px; padding-top:14px;
+         border-top:1px solid var(--linea); text-align:center; letter-spacing:.04em}
 
   /* ---------- cartel de sin conexion ---------- */
   #offline-overlay{position:fixed; inset:0; z-index:9999; display:none;
@@ -175,6 +180,7 @@
          onload="this.style.display='block'">
     <h1>Estado diario — <span>Azure</span></h1>
   </div>
+  <div id="meta"></div>
   <button class="btn" onclick="cargar(true)">⟳ Actualizar</button>
   <div id="clock">--:--:--</div>
 </header>
@@ -233,7 +239,6 @@
   </div>
 </div>
 
-<footer id="foot"></footer>
 </div><!-- /vista-infra -->
 
 <div class="vista" id="vista-procesos">
@@ -265,8 +270,9 @@
     </table>
   </div>
 
-  <footer id="foot-proc"></footer>
 </div><!-- /vista-procesos -->
+
+<footer>SGP — Departamento de IT</footer>
 
 <div id="offline-overlay">
   <div class="ov-inner">
@@ -421,11 +427,29 @@ function pintar(){
   chip("chip-infra", d.overall === "fail" ? "fail" : d.overall === "ok" ? "ok" : "warn",
        (c.fail ? c.fail + " ✖" : c.sincopia ? c.sincopia + " ◆" : c.warn ? c.warn + " ▲" : "OK"));
 
-  const extras = [];
-  if(d.huerfanos) extras.push(d.huerfanos + " copia(s) de VMs eliminadas, ocultas");
-  $("foot").textContent = "Recogida " + fmt(d.generated_at) + " (" + ago(d.generated_at) + ")" +
-    " · aviso si se superan " + d.sla_hours + " h sin copia correcta" +
-    (extras.length ? " · " + extras.join(" · ") : "");
+  pintarMeta();
+}
+
+/* Cabecera: ultima actualizacion de los datos y caducidad del secreto */
+function pintarMeta(){
+  const fechas = [DATA && DATA.generated_at, PROC && PROC.generated_at].filter(Boolean);
+  const lineas = [];
+
+  if(fechas.length){
+    const ultima = fechas.sort().pop();
+    lineas.push(`Datos actualizados: <b>${fmt(ultima)}</b> · ${ago(ultima)}`);
+  }
+
+  const sec = (DATA || {}).secreto || {};
+  if(sec.fecha){
+    const d = new Date(sec.fecha);
+    const txt = d.toLocaleDateString("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
+    const cls = sec.dias < 0 ? "critico" : sec.dias <= 30 ? "alerta" : "";
+    const cola = sec.dias < 0 ? " — CADUCADO" : ` (${sec.dias} días)`;
+    lineas.push(`Secreto caduca: <span class="${cls}">${txt}${cola}</span>`);
+  }
+
+  $("meta").innerHTML = lineas.join("<br>");
 }
 
 function politicaTexto(p){
@@ -631,10 +655,7 @@ function pintarProcesos(){
   chip("chip-procesos", p.overall === "fail" ? "fail" : p.overall === "ok" ? "ok" : "warn",
        c.fail ? c.fail + " ✖" : c.sinejecutar ? c.sinejecutar + " ◆" : c.warn ? c.warn + " ▲" : "OK");
 
-  const guardadas = Object.values(((TEND||{}).runbooks)||{}).reduce((a,s) => a + s.length, 0);
-  $("foot-proc").textContent = "Cuenta " + (p.cuenta||"") + " · recogida " + fmt(p.generated_at) +
-    " (" + ago(p.generated_at) + ") · ventana de " + p.window_days + " días" +
-    (guardadas ? " · " + guardadas + " ejecuciones en el histórico local" : "");
+  pintarMeta();
 }
 
 /* ---------- cronologia de la cadena nocturna ---------- */

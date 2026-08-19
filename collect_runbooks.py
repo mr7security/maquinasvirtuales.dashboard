@@ -97,29 +97,43 @@ def texto_estado(valor) -> str:
     return texto[:1].upper() + texto[1:].lower() if texto else ""
 
 
-def hora_habitual(ejecuciones: list[dict]) -> tuple[int | None, int]:
-    """Minuto del dia (UTC) al que suele arrancar el proceso, por mediana.
+def texto_intervalo(horas: float) -> str:
+    if horas < 1.5:
+        return f"{round(horas * 60)} min"
+    if horas < 48:
+        return f"{horas:.0f} h"
+    return f"{horas / 24:.0f} días"
+
+
+def intervalo_habitual(ejecuciones: list[dict]) -> tuple[float | None, int]:
+    """Horas que suelen pasar entre una ejecucion y la siguiente (mediana).
+
+    Se mide el intervalo y no la hora del dia a proposito. Un proceso puede
+    correr una vez al dia, dos, o cada pocas horas —Process_AS_Finanzas se
+    ejecuta a las 23:00 y a las 08:06—, y una unica "hora habitual" no
+    describe esos casos. El intervalo vale para cualquier cadencia.
 
     Se deduce de las ejecuciones reales en lugar de las programaciones de Azure
-    por dos motivos comprobados en este entorno: hay runbooks que se disparan
-    desde fuera de Automation y no tienen programacion vinculada, y alguno que
-    la tiene la tiene desfasada respecto a lo que ocurre de verdad.
+    porque en esta cuenta hay runbooks que se disparan desde fuera de Automation
+    y no tienen programacion vinculada.
     """
-    minutos = []
+    tiempos = []
     for e in ejecuciones:
         if not e.get("inicio"):
             continue
         try:
-            dt = datetime.fromisoformat(str(e["inicio"]).replace("Z", "+00:00"))
+            tiempos.append(datetime.fromisoformat(str(e["inicio"]).replace("Z", "+00:00")))
         except ValueError:
             continue
-        dt = dt.astimezone(timezone.utc)
-        minutos.append(dt.hour * 60 + dt.minute)
 
-    if len(minutos) < 3:
-        return None, len(minutos)
-    minutos.sort()
-    return minutos[len(minutos) // 2], len(minutos)
+    if len(tiempos) < 3:
+        return None, len(tiempos)
+
+    tiempos.sort()
+    huecos = sorted((b - a).total_seconds() / 3600 for a, b in zip(tiempos, tiempos[1:]))
+    if not huecos:
+        return None, len(tiempos)
+    return huecos[len(huecos) // 2], len(tiempos)
 
 
 def clasificar(job: dict | None, esperada: str | None) -> str:
@@ -308,22 +322,21 @@ def collect_azure(dias: int) -> dict:
         # ¿Cuando deberia haber corrido por ultima vez?
         # Fuente principal: la hora a la que se ejecuta de verdad.
         esperada, horario_txt, origen = None, "", ""
-        mediana, muestras = hora_habitual(ejecuciones)
+        intervalo, muestras = intervalo_habitual(ejecuciones)
 
-        if mediana is not None:
-            base = ahora.replace(
-                hour=mediana // 60, minute=mediana % 60, second=0, microsecond=0
-            )
-            # Si la de hoy todavia no ha vencido, la referencia es la de ayer
-            if ahora < base + timedelta(hours=MARGEN_HORAS):
-                base -= timedelta(days=1)
-            esperada = base
-            origen = "historico"
-            horario_txt = (
-                f"habitual {base.astimezone().strftime('%H:%M')} "
-                f"(mediana de {muestras} ejecuciones)"
-            )
-        else:
+        if intervalo is not None and (ultima or {}).get("inicio"):
+            try:
+                arranque = datetime.fromisoformat(str(ultima["inicio"]).replace("Z", "+00:00"))
+                esperada = arranque + timedelta(hours=intervalo)
+                origen = "historico"
+                horario_txt = (
+                    f"cada ~{texto_intervalo(intervalo)} "
+                    f"(mediana de {muestras} ejecuciones)"
+                )
+            except ValueError:
+                esperada = None
+
+        if esperada is None:
             # Respaldo: la programacion configurada en Azure
             for nombre_prog in enlaces.get(nombre, []):
                 prog = programas.get(nombre_prog)
