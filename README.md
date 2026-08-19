@@ -210,12 +210,47 @@ maquinasvirtuales.dashboard/
     └── dashboard-copias-azure-collector.timer    Cada 30 min
 ```
 
+## Pestaña 2 — Procesos BI
+
+Automatiza el segundo procedimiento de OneNote ("REVISAR TODOS LOS DÍAS AZURE"):
+la revisión diaria de los runbooks de Azure Automation de `automationsrvprobi01`.
+
+El procedimiento manual avisa de que **"que aparezca Completada no quiere decir que
+esté OK, hay que revisar que no tenga errores"**. El colector hace justo eso: además
+del estado del job, descarga los registros de la última ejecución y cuenta errores y
+advertencias reales. Un runbook `Completed` con un error dentro sale en rojo, con el
+texto del error en la propia tarjeta.
+
+Y detecta algo que la revisión manual no ve: un runbook que **no se ha ejecutado**.
+Para saber cuándo debería haberlo hecho lee las programaciones configuradas en la
+cuenta de Automation, así que se adapta solo si cambiáis los horarios.
+
+Configuración en el `.env`:
+
+```
+AUTOMATION_ACCOUNT=automationsrvprobi01
+AUTOMATION_RESOURCE_GROUP=rg_pro_bi
+AUTOMATION_RUNBOOKS=ProcAlm_ProcessAll,ProcAlm_CarteraFecha,Process_AS_Cartera,Process_AS_Cartera_Fecha,Process_AS_Finanzas
+RUNBOOK_MARGEN_HORAS=3
+```
+
+`RUNBOOK_MARGEN_HORAS` es el tiempo que se espera tras la hora programada antes de
+dar un proceso por no ejecutado. Debe cubrir lo que tarda el más lento.
+
+Fuera de alcance por ahora, documentado por si se retoma:
+
+- **Trabajos por lotes de D365 Finance & Operations.** No es Azure Resource Manager;
+  va por la API OData de F&O y requiere registrar la aplicación dentro del entorno
+- **Correo automático a soportebi@ifr.es.** Conviene esperar a comprobar que la
+  detección no da falsos positivos antes de automatizar avisos a un proveedor externo
+
 ## Rutas del servidor
 
 | Ruta | Qué devuelve |
 |---|---|
 | `/` | La interfaz (`dashboard.html`) |
-| `/api/data` | El JSON completo. La página lo consulta cada 60 s |
+| `/api/data` | Copias y máquinas virtuales. La página lo consulta cada 60 s |
+| `/api/procesos` | Estado de los runbooks de Automation |
 | `/csv` | Exportación del estado actual, separada por `;` y con BOM para Excel |
 | `/logo` | `logo.png` del directorio de la aplicación, si existe |
 | `/salud` | Devuelve el estado global en texto plano; 503 si aún no hay datos |

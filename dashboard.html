@@ -26,7 +26,7 @@
   #banner ul{margin:6px 0 0 18px}
 
   /* ---------- resumen: franja centrada con separadores ---------- */
-  #kpis{display:flex; justify-content:center; align-items:stretch; flex-wrap:wrap; margin:4px 0 18px}
+  #kpis,#kpis-proc{display:flex; justify-content:center; align-items:stretch; flex-wrap:wrap; margin:4px 0 18px}
   .kpi{padding:0 26px; text-align:center}
   .kpi .n{font-size:1.9rem; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums}
   .kpi .l{font-size:.63rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-top:3px}
@@ -41,6 +41,33 @@
   .pill.warn{background:rgba(245,158,11,.18); color:var(--warn)}
   .pill.off{background:rgba(100,116,139,.2); color:var(--off)}
   .pill.nobkp{background:rgba(167,139,250,.18); color:var(--nobkp)}
+
+  /* ---------- pestanas ---------- */
+  #tabs{display:flex; gap:6px; border-bottom:1px solid var(--linea); margin-bottom:16px}
+  .tab{background:none; border:none; border-bottom:3px solid transparent; color:var(--muted);
+       padding:9px 16px; font-size:.9rem; font-family:inherit; cursor:pointer;
+       text-transform:uppercase; letter-spacing:.03em; display:flex; align-items:center; gap:8px}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--accent); border-bottom-color:var(--accent); font-weight:600}
+  .tab .chip{font-size:.62rem; padding:1px 7px; border-radius:99px; font-weight:700}
+  .tab .chip.ok{background:rgba(34,197,94,.16); color:var(--ok)}
+  .tab .chip.warn{background:rgba(245,158,11,.18); color:var(--warn)}
+  .tab .chip.fail{background:rgba(239,68,68,.2); color:var(--alarm)}
+  .vista{display:none} .vista.active{display:block}
+
+  /* ---------- procesos BI ---------- */
+  .proc{background:var(--card); border-radius:10px; padding:10px 13px; border-left:4px solid var(--off);
+        display:flex; flex-direction:column; gap:4px}
+  .proc.ok{border-left-color:var(--ok)}
+  .proc.warn{border-left-color:var(--warn)}
+  .proc.fail{border-left-color:var(--alarm); animation:blink 1.2s infinite}
+  .proc.sinejecutar{border-left-color:var(--nobkp)}
+  .proc-h{display:flex; justify-content:space-between; align-items:center; gap:8px}
+  .proc-h h2{font-size:.9rem; font-weight:700; overflow-wrap:anywhere}
+  .msg{background:var(--card2); border-radius:7px; padding:7px 9px; font-size:.7rem;
+       line-height:1.4; color:#fca5a5; overflow-wrap:anywhere; max-height:120px; overflow:auto;
+       font-family:ui-monospace,Consolas,monospace}
+  .msg.aviso{color:#fcd34d}
 
   /* ---------- filtros ---------- */
   .tools{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px}
@@ -128,11 +155,22 @@
   <div style="display:flex; align-items:center; gap:14px">
     <img id="logo" src="/logo" alt="" style="height:42px; display:none; background:#fff; border-radius:8px; padding:3px 8px"
          onload="this.style.display='block'">
-    <h1>Copias y máquinas virtuales — <span>Azure</span></h1>
+    <h1>Estado diario — <span>Azure</span></h1>
   </div>
   <button class="btn" onclick="cargar(true)">⟳ Actualizar</button>
   <div id="clock">--:--:--</div>
 </header>
+
+<div id="tabs">
+  <button class="tab active" data-vista="infra" onclick="verVista('infra')">
+    Copias y máquinas <span class="chip" id="chip-infra"></span>
+  </button>
+  <button class="tab" data-vista="procesos" onclick="verVista('procesos')">
+    Procesos BI <span class="chip" id="chip-procesos"></span>
+  </button>
+</div>
+
+<div class="vista active" id="vista-infra">
 
 <div id="banner"></div>
 <div id="kpis"></div>
@@ -178,6 +216,36 @@
 </div>
 
 <footer id="foot"></footer>
+</div><!-- /vista-infra -->
+
+<div class="vista" id="vista-procesos">
+  <div id="banner-proc"></div>
+  <div id="kpis-proc"></div>
+
+  <h3 style="margin-top:0">Runbooks de Azure Automation</h3>
+  <div class="cards" id="procs" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr))"></div>
+
+  <h3>Histórico de ejecuciones</h3>
+  <div class="tools">
+    <input type="search" id="qp" placeholder="Filtrar por runbook o estado…">
+    <select id="fp">
+      <option value="">Todos los estados</option>
+      <option value="fail">Solo con problema</option>
+      <option value="ok">Solo correctos</option>
+    </select>
+    <span class="count" id="pcount"></span>
+  </div>
+  <div class="tablebox">
+    <table id="tablaproc">
+      <thead><tr>
+        <th>Runbook</th><th>Estado</th><th>Inicio</th><th>Fin</th><th>Duración</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <footer id="foot-proc"></footer>
+</div><!-- /vista-procesos -->
 
 <div id="offline-overlay">
   <div class="ov-inner">
@@ -194,9 +262,11 @@ const REFRESH_S = 60;          // sondeo del endpoint
 const STALE_MIN = 90;          // aviso si el colector lleva mas de esto sin correr
 
 let DATA = null;
+let PROC = null;
 let lastOk = Date.now();
 let chart = null;
 let sortKey = "start_time", sortDir = -1;
+let vista = localStorage.getItem("vista") || "infra";
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -229,17 +299,35 @@ function updateOverlay(){
   $("ov-timer").textContent = `${h}:${m}:${s}`;
 }
 
+/* ---------- pestanas ---------- */
+function verVista(cual){
+  vista = cual;
+  localStorage.setItem("vista", cual);
+  document.querySelectorAll(".vista").forEach(v => v.classList.toggle("active", v.id === "vista-" + cual));
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.vista === cual));
+}
+
+function chip(id, estado, texto){
+  const el = $(id);
+  el.className = "chip " + (estado || "");
+  el.textContent = texto;
+}
+
 /* ---------- carga ---------- */
 async function cargar(manual){
-  try{
-    const r = await fetch("/api/data?t=" + Date.now(), {cache:"no-store"});
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    DATA = await r.json();
+  const [infra, procesos] = await Promise.allSettled([
+    fetch("/api/data?t=" + Date.now(), {cache:"no-store"}).then(r => r.ok ? r.json() : Promise.reject(r.status)),
+    fetch("/api/procesos?t=" + Date.now(), {cache:"no-store"}).then(r => r.ok ? r.json() : Promise.reject(r.status))
+  ]);
+
+  if(infra.status === "fulfilled"){ DATA = infra.value; pintar(); }
+  if(procesos.status === "fulfilled"){ PROC = procesos.value; pintarProcesos(); }
+
+  if(infra.status === "fulfilled" || procesos.status === "fulfilled"){
     lastOk = Date.now();
     $("offline-overlay").classList.remove("show");
-    pintar();
-  }catch(e){
-    if(manual) alert("No se pudo contactar con el servidor: " + e.message);
+  }else if(manual){
+    alert("No se pudo contactar con el servidor.");
   }
   updateOverlay();
 }
@@ -289,6 +377,9 @@ function pintar(){
   pintarCards();
   pintarChart();
   pintarJobs();
+
+  chip("chip-infra", d.overall === "fail" ? "fail" : d.overall === "ok" ? "ok" : "warn",
+       (c.fail ? c.fail + " ✖" : c.sincopia ? c.sincopia + " ◆" : c.warn ? c.warn + " ▲" : "OK"));
 
   const extras = [];
   if(d.huerfanos) extras.push(d.huerfanos + " copia(s) de VMs eliminadas, ocultas");
@@ -433,6 +524,102 @@ function pintarJobs(){
     </tr>`; }).join("") : '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>';
 }
 
+/* ---------- procesos BI ---------- */
+const ETIQ_PROC = {ok:"● Correcto", warn:"▲ Con advertencias", fail:"✖ Con errores",
+                   sinejecutar:"◆ No ejecutado", unknown:"? Sin datos"};
+
+function pintarProcesos(){
+  const p = PROC; if(!p) return;
+
+  // --- avisos ---
+  let html = "", clase = "";
+  const conError = (p.procesos||[]).filter(x => x.estado === "fail");
+  const sinEjecutar = (p.procesos||[]).filter(x => x.estado === "sinejecutar");
+
+  if(p.demo) html += "<b>Modo demo.</b> Datos de ejemplo.<br>";
+  if(conError.length){ clase = "bad";
+    html += "<b>Procesos con errores (" + conError.length + "):</b> " +
+      conError.map(x => esc(x.nombre)).join(", ") + "<br>"; }
+  if(sinEjecutar.length) html += "<b>No se han ejecutado (" + sinEjecutar.length + "):</b> " +
+      sinEjecutar.map(x => esc(x.nombre)).join(", ") + "<br>";
+  if((p.collector_errors||[]).length){ clase = "bad";
+    html += "<b>Errores del colector:</b><ul>" +
+      p.collector_errors.map(e => "<li>" + esc(e) + "</li>").join("") + "</ul>"; }
+  $("banner-proc").className = html ? "show " + clase : "";
+  $("banner-proc").innerHTML = html;
+
+  // --- resumen ---
+  const c = p.counts || {};
+  $("kpis-proc").innerHTML = [
+    ["", (p.procesos||[]).length, "Procesos"],
+    ["ok", c.ok||0, "Correctos"],
+    ["warn", c.warn||0, "Advertencias"],
+    ["alarm", c.fail||0, "Con errores"],
+    ["nobkp", c.sinejecutar||0, "No ejecutados"]
+  ].map(([k,n,l]) => `<div class="kpi ${k}"><div class="n">${n}</div><div class="l">${l}</div></div>`)
+   .join('<div class="sep"></div>');
+
+  // --- tarjetas ---
+  $("procs").innerHTML = (p.procesos||[]).map(x => {
+    const errores = (x.errores||[]).slice(0,3);
+    const avisos = (x.advertencias||[]).slice(0,2);
+    return `<div class="proc ${x.estado}">
+      <div class="proc-h">
+        <h2>${esc(x.nombre)}</h2>
+        <span class="status ${x.estado === "sinejecutar" ? "sincopia" : x.estado}">${ETIQ_PROC[x.estado]||""}</span>
+      </div>
+      <div class="linea">
+        <span class="cuando">${x.inicio ? fmt(x.inicio) + " · " + ago(x.inicio) : "sin ejecuciones registradas"}</span>
+      </div>
+      <div class="sub">
+        Azure dice: <b>${esc(x.ultimo_estado || "—")}</b>
+        ${x.duracion_s != null ? " · " + dur(x.duracion_s) : ""}
+        ${x.n_errores || x.n_advertencias
+          ? ` · ${x.n_errores} errores, ${x.n_advertencias} advertencias` : " · sin errores ni advertencias"}
+        ${x.horario ? `<br>${esc(x.horario)}` : ""}
+      </div>
+      ${errores.map(m => `<div class="msg">${esc(m)}</div>`).join("")}
+      ${avisos.map(m => `<div class="msg aviso">${esc(m)}</div>`).join("")}
+    </div>`;
+  }).join("") || '<div class="empty">Sin procesos configurados.</div>';
+
+  pintarTablaProc();
+
+  chip("chip-procesos", p.overall === "fail" ? "fail" : p.overall === "ok" ? "ok" : "warn",
+       c.fail ? c.fail + " ✖" : c.sinejecutar ? c.sinejecutar + " ◆" : c.warn ? c.warn + " ▲" : "OK");
+
+  $("foot-proc").textContent = "Cuenta " + (p.cuenta||"") + " · recogida " + fmt(p.generated_at) +
+    " (" + ago(p.generated_at) + ") · ventana de " + p.window_days + " días";
+}
+
+function pintarTablaProc(){
+  const p = PROC;
+  const term = $("qp").value.toLowerCase(), filtro = $("fp").value;
+  const malo = j => (j.estado||"").toLowerCase() !== "completed" || (j.errores||[]).length;
+  const rows = (p.historico||[]).filter(j => {
+    if(term && !((j.runbook + " " + j.estado).toLowerCase().includes(term))) return false;
+    if(filtro === "fail") return malo(j);
+    if(filtro === "ok") return !malo(j);
+    return true;
+  });
+  $("pcount").textContent = rows.length + " de " + (p.historico||[]).length + " ejecuciones";
+  document.querySelector("#tablaproc tbody").innerHTML = rows.length ? rows.map(j => {
+    const st = malo(j) ? "alarm" : "ok";
+    return `<tr>
+      <td>${esc(j.runbook)}</td>
+      <td><span class="pill ${st}">${esc(j.estado)}</span>
+          ${(j.errores||[]).length ? `<div class="errtxt">${esc(j.errores.join(" · "))}</div>` : ""}</td>
+      <td>${fmt(j.inicio)}</td><td>${fmt(j.fin)}</td>
+      <td>${dur(_dursec(j))}</td>
+    </tr>`; }).join("") : '<tr><td colspan="5" class="empty">Sin resultados.</td></tr>';
+}
+
+function _dursec(j){
+  if(!j.inicio || !j.fin) return null;
+  const d = (new Date(j.fin) - new Date(j.inicio)) / 1000;
+  return isNaN(d) ? null : Math.max(d, 0);
+}
+
 /* ---------- arranque ---------- */
 document.querySelectorAll("#jobs th").forEach(th => th.onclick = () => {
   const k = th.dataset.k;
@@ -441,11 +628,13 @@ document.querySelectorAll("#jobs th").forEach(th => th.onclick = () => {
 });
 $("q").oninput = pintarCards; $("f").onchange = pintarCards;
 $("qj").oninput = pintarJobs; $("fj").onchange = pintarJobs;
+$("qp").oninput = pintarTablaProc; $("fp").onchange = pintarTablaProc;
 
 setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("es-ES"); }, 1000);
 setInterval(updateOverlay, 1000);
 setInterval(cargar, REFRESH_S * 1000);
 
+verVista(vista);
 cargar();
 </script>
 </body>

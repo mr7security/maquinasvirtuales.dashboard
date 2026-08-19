@@ -106,6 +106,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.servir_shell()
         if ruta == "/api/data":
             return self.servir_datos()
+        if ruta == "/api/procesos":
+            return self.servir_procesos()
         if ruta == "/csv":
             return self.servir_csv()
         if ruta == "/logo":
@@ -142,6 +144,25 @@ class Handler(BaseHTTPRequestHandler):
                     "collector_errors": [
                         "Todavia no se ha generado data.json. Ejecuta collect.py "
                         "o espera a la proxima pasada del timer."
+                    ],
+                }
+            ).encode("utf-8")
+            return self.responder(200, "application/json; charset=utf-8", cuerpo)
+        return self.responder(200, "application/json; charset=utf-8", ruta.read_bytes())
+
+    def servir_procesos(self) -> None:
+        ruta = self.data_dir / "procesos.json"
+        if not ruta.exists():
+            cuerpo = json.dumps(
+                {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "overall": "unknown",
+                    "procesos": [],
+                    "historico": [],
+                    "counts": {},
+                    "collector_errors": [
+                        "Todavia no se ha generado procesos.json. Ejecuta "
+                        "collect_runbooks.py o espera a la proxima pasada del timer."
                     ],
                 }
             ).encode("utf-8")
