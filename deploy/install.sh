@@ -39,6 +39,8 @@ install -m 644 "$SRC_DIR/collect.py"       "$APP_DIR/collect.py"
 install -m 644 "$SRC_DIR/serve.py"         "$APP_DIR/serve.py"
 install -m 644 "$SRC_DIR/dashboard.html"   "$APP_DIR/dashboard.html"
 install -m 644 "$SRC_DIR/requirements.txt" "$APP_DIR/requirements.txt"
+# grupos.json es configuracion: no se pisa si ya existe en el servidor
+[[ -f "$APP_DIR/grupos.json" ]] || install -m 644 "$SRC_DIR/grupos.json" "$APP_DIR/grupos.json"
 rm -f "$APP_DIR/dashboard_template.html" "$APP_DIR/public/index.html"
 if [[ -f "$SRC_DIR/logo.png" ]]; then install -m 644 "$SRC_DIR/logo.png" "$APP_DIR/logo.png"; fi
 [[ -f "$APP_DIR/.env" ]] || install -m 600 "$SRC_DIR/.env.example" "$APP_DIR/.env"
