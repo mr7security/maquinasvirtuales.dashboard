@@ -8,16 +8,18 @@ Type=oneshot
 User=dashboard-copias
 Group=dashboard-copias
 WorkingDirectory=/opt/dashboard-copias-azure
-ExecStart=/opt/dashboard-copias-azure/venv/bin/python /opt/dashboard-copias-azure/collect.py --out /opt/dashboard-copias-azure/public
-TimeoutStartSec=600
+# El guion inicial hace que un fallo del primer colector no impida el segundo:
+# cada uno escribe su propio JSON y reporta sus errores en el dashboard.
+ExecStart=-/opt/dashboard-copias-azure/venv/bin/python /opt/dashboard-copias-azure/collect.py --out /opt/dashboard-copias-azure/public
+ExecStart=/opt/dashboard-copias-azure/venv/bin/python /opt/dashboard-copias-azure/collect_runbooks.py --out /opt/dashboard-copias-azure/public
+TimeoutStartSec=900
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=dashboard-copias-azure-collector
 
-# collect.py devuelve 2 cuando hay copias en fallo: es un resultado, no un error del servicio
+# collect.py devuelve 2 cuando hay copias en fallo: es un resultado, no un error
 SuccessExitStatus=0 2
 
-# Endurecimiento basico: solo necesita leer su carpeta, escribir la salida y salir a la red
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
