@@ -642,7 +642,7 @@ def collect_azure(days: int, sla_hours: float) -> dict:
     # 4. Coste del mes en curso (opcional: requiere Cost Management Reader)
     # ----------------------------------------------------------------------
     costes = {}
-    if (env("COSTES", "1") or "1").lower() not in ("0", "no", "false"):
+    if (env("COSTES", "0") or "0").lower() not in ("0", "no", "false"):
         try:
             costes = costes_por_grupo(credential, subscription_id)
         except Exception as exc:  # noqa: BLE001
@@ -655,6 +655,9 @@ def collect_azure(days: int, sla_hours: float) -> dict:
         vaults, items, jobs, days, sla_hours, errors, orphans, ignore_patterns, grupos_cfg
     )
     payload["secreto"] = dias_para_caducar()
+    payload["tenant_nombre"] = env("TENANT_NOMBRE", "") or ""
+    payload["tenant_id"] = tenant_id or ""
+    payload["subscription_id"] = subscription_id
 
     # Reparte el coste entre los grupos del dashboard. Si un grupo de recursos
     # tuviera maquinas de dos grupos distintos su coste contaria en ambos, asi
