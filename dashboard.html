@@ -68,6 +68,24 @@
        line-height:1.4; color:#fca5a5; overflow-wrap:anywhere; max-height:120px; overflow:auto;
        font-family:ui-monospace,Consolas,monospace}
   .msg.aviso{color:#fcd34d}
+  .spark{display:flex; align-items:flex-end; gap:1px; height:22px; margin-top:2px}
+  .spark i{flex:1; background:var(--off); border-radius:1px 1px 0 0; min-height:2px; display:block}
+  .spark i.ok{background:#2f6d4a} .spark i.fail{background:var(--alarm)}
+  .spark i.ult{background:var(--accent)}
+  .trend{font-size:.66rem; color:var(--muted)}
+  .trend b.up{color:var(--warn)} .trend b.down{color:var(--ok)}
+
+  /* ---------- cronologia de la cadena nocturna ---------- */
+  .crono{display:grid; grid-template-columns:190px 1fr; gap:6px 10px; align-items:center}
+  .crono .nm{font-size:.74rem; text-align:right; overflow-wrap:anywhere}
+  .crono .pista{position:relative; height:20px; background:var(--card2); border-radius:4px}
+  .crono .barra{position:absolute; top:3px; bottom:3px; border-radius:3px; background:var(--accent);
+                display:flex; align-items:center; padding:0 6px; font-size:.62rem; color:#06263a;
+                font-weight:700; white-space:nowrap; overflow:hidden}
+  .crono .barra.fail{background:var(--alarm); color:#fff}
+  .crono .eje{position:relative; height:16px; font-size:.62rem; color:var(--muted)}
+  .crono .eje span{position:absolute; transform:translateX(-50%)}
+  .crono .marca{position:absolute; top:0; bottom:0; width:1px; background:var(--linea)}
 
   /* ---------- filtros ---------- */
   .tools{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px}
@@ -222,7 +240,10 @@
   <div id="banner-proc"></div>
   <div id="kpis-proc"></div>
 
-  <h3 style="margin-top:0">Runbooks de Azure Automation</h3>
+  <h3 style="margin-top:0">Cadena de la última noche</h3>
+  <div class="panel" id="cronoPanel"><div class="crono" id="crono"></div></div>
+
+  <h3>Runbooks de Azure Automation</h3>
   <div class="cards" id="procs" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr))"></div>
 
   <h3>Histórico de ejecuciones</h3>
@@ -263,6 +284,7 @@ const STALE_MIN = 90;          // aviso si el colector lleva mas de esto sin cor
 
 let DATA = null;
 let PROC = null;
+let TEND = null;
 let lastOk = Date.now();
 let chart = null;
 let sortKey = "start_time", sortDir = -1;
@@ -321,11 +343,13 @@ function chip(id, estado, texto){
 
 /* ---------- carga ---------- */
 async function cargar(manual){
-  const [infra, procesos] = await Promise.allSettled([
+  const [infra, procesos, tendencia] = await Promise.allSettled([
     fetch("/api/data?t=" + Date.now(), {cache:"no-store"}).then(r => r.ok ? r.json() : Promise.reject(r.status)),
-    fetch("/api/procesos?t=" + Date.now(), {cache:"no-store"}).then(r => r.ok ? r.json() : Promise.reject(r.status))
+    fetch("/api/procesos?t=" + Date.now(), {cache:"no-store"}).then(r => r.ok ? r.json() : Promise.reject(r.status)),
+    fetch("/api/tendencia?t=" + Date.now(), {cache:"no-store"}).then(r => r.ok ? r.json() : Promise.reject(r.status))
   ]);
 
+  if(tendencia.status === "fulfilled") TEND = tendencia.value;
   if(infra.status === "fulfilled"){ DATA = infra.value; pintar(); }
   if(procesos.status === "fulfilled"){ PROC = procesos.value; pintarProcesos(); }
 
@@ -349,6 +373,14 @@ function pintar(){
   const sin = (d.items||[]).filter(i => i.state === "sincopia");
 
   if(d.demo) bannerHtml += "<b>Modo demo.</b> Datos de ejemplo, no reflejan el entorno real.<br>";
+  const sec = d.secreto || {};
+  if(sec.dias != null && sec.dias <= 30){
+    if(sec.dias < 0) bannerClass = "bad";
+    bannerHtml += sec.dias < 0
+      ? `<b>El secreto del Service Principal caducó el ${sec.fecha}.</b> Los datos que ves ya no se actualizan.<br>`
+      : `<b>El secreto del Service Principal caduca en ${sec.dias} días</b> (${sec.fecha}). Rótalo antes de esa fecha.<br>`;
+  }
+  if(sec.error) bannerHtml += esc(sec.error) + "<br>";
   if(edadMin > STALE_MIN){
     bannerClass = "bad";
     bannerHtml += `<b>Datos obsoletos.</b> La última recogida fue ${ago(d.generated_at)}. Revisa el timer del colector.<br>`;
@@ -376,6 +408,8 @@ function pintar(){
     ["alarm", c.fail||0, "Fallos"],
     ["alarm", d.failed_jobs||0, "Jobs fallidos"]
   ];
+  if(d.coste_total != null)
+    bloques.push(["", Math.round(d.coste_total).toLocaleString("es-ES"), "€ este mes"]);
   $("kpis").innerHTML = bloques
     .map(([k,n,l]) => `<div class="kpi ${k}"><div class="n">${n}</div><div class="l">${l}</div></div>`)
     .join('<div class="sep"></div>');
@@ -441,10 +475,11 @@ function tarjeta(i){
   </div>`;
 }
 
-function bloqueGrupo(nombre, color, miembros){
+function bloqueGrupo(nombre, color, miembros, coste){
   const c = {};
   miembros.forEach(i => c[i.state] = (c[i.state] || 0) + 1);
   const pills = [
+    coste != null ? `<span class="pill off">${Math.round(coste).toLocaleString("es-ES")} € / mes</span>` : "",
     c.fail     ? `<span class="pill alarm">✖ ${c.fail} con fallo</span>` : "",
     c.sincopia ? `<span class="pill nobkp">◆ ${c.sincopia} sin copia</span>` : "",
     c.warn     ? `<span class="pill warn">▲ ${c.warn} atención</span>` : "",
@@ -474,7 +509,7 @@ function pintarCards(){
   const definidos = (d.grupos||[]).map(g => g.nombre);
   let html = (d.grupos||[]).map(g => {
     const miembros = visibles.filter(i => i.grupo === g.nombre);
-    return miembros.length ? bloqueGrupo(g.nombre, g.color, miembros) : "";
+    return miembros.length ? bloqueGrupo(g.nombre, g.color, miembros, g.coste) : "";
   }).join("");
 
   const huerfanas = visibles.filter(i => !definidos.includes(i.grupo));
@@ -586,16 +621,84 @@ function pintarProcesos(){
       </div>
       ${errores.map(m => `<div class="msg">${esc(m)}</div>`).join("")}
       ${avisos.map(m => `<div class="msg aviso">${esc(m)}</div>`).join("")}
+      ${sparkline(x.nombre)}
     </div>`;
   }).join("") || '<div class="empty">Sin procesos configurados.</div>';
 
+  pintarCrono();
   pintarTablaProc();
 
   chip("chip-procesos", p.overall === "fail" ? "fail" : p.overall === "ok" ? "ok" : "warn",
        c.fail ? c.fail + " ✖" : c.sinejecutar ? c.sinejecutar + " ◆" : c.warn ? c.warn + " ▲" : "OK");
 
+  const guardadas = Object.values(((TEND||{}).runbooks)||{}).reduce((a,s) => a + s.length, 0);
   $("foot-proc").textContent = "Cuenta " + (p.cuenta||"") + " · recogida " + fmt(p.generated_at) +
-    " (" + ago(p.generated_at) + ") · ventana de " + p.window_days + " días";
+    " (" + ago(p.generated_at) + ") · ventana de " + p.window_days + " días" +
+    (guardadas ? " · " + guardadas + " ejecuciones en el histórico local" : "");
+}
+
+/* ---------- cronologia de la cadena nocturna ---------- */
+function pintarCrono(){
+  const p = PROC;
+  // Ultima ejecucion de cada runbook, siempre que tengamos inicio y fin
+  const ultimas = {};
+  (p.historico||[]).forEach(j => {
+    if(!j.inicio || !j.fin) return;
+    if(!ultimas[j.runbook] || j.inicio > ultimas[j.runbook].inicio) ultimas[j.runbook] = j;
+  });
+  const lista = Object.values(ultimas).sort((a,b) => a.inicio.localeCompare(b.inicio));
+  if(!lista.length){ $("crono").innerHTML = '<div class="empty">Sin ejecuciones con hora de inicio y fin.</div>'; return; }
+
+  const t0 = new Date(lista[0].inicio).getTime();
+  const t1 = Math.max(...lista.map(j => new Date(j.fin).getTime()));
+  const span = Math.max(t1 - t0, 60000);
+  const pos = t => ((new Date(t).getTime() - t0) / span) * 100;
+
+  const hhmm = t => new Date(t).toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"});
+  let html = lista.map(j => {
+    const izq = pos(j.inicio), der = pos(j.fin);
+    const ancho = Math.max(der - izq, 1.2);
+    const falla = limpiaEstado(j.estado).toLowerCase() !== "completed" || (j.errores||[]).length;
+    return `<div class="nm">${esc(j.runbook)}</div>
+      <div class="pista">
+        <div class="barra ${falla ? "fail" : ""}" style="left:${izq}%;width:${ancho}%"
+             title="${hhmm(j.inicio)} → ${hhmm(j.fin)}">${dur(_dursec(j))}</div>
+      </div>`;
+  }).join("");
+
+  // Eje con la hora de inicio y de fin de la cadena
+  html += `<div></div><div class="eje">
+      <span style="left:0">${hhmm(lista[0].inicio)}</span>
+      <span style="left:100%">${hhmm(t1)}</span>
+    </div>`;
+
+  $("crono").innerHTML = html;
+
+  const total = Math.round((t1 - t0) / 60000);
+  const cab = document.querySelector("#vista-procesos h3");
+  if(cab) cab.textContent = `Cadena de la última noche · ${hhmm(lista[0].inicio)} a ${hhmm(t1)} · ${total} min en total`;
+}
+
+/* ---------- tendencia de duracion ---------- */
+function sparkline(nombre){
+  const serie = ((TEND||{}).runbooks||{})[nombre] || [];
+  if(serie.length < 3) return "";
+  const max = Math.max(...serie.map(s => s.duracion_s)) || 1;
+  const barras = serie.slice(-24).map((s, i, arr) => {
+    const alto = Math.max(Math.round(s.duracion_s / max * 100), 6);
+    const cls = s.errores ? "fail" : (i === arr.length - 1 ? "ult" : "ok");
+    return `<i class="${cls}" style="height:${alto}%" title="${fmt(s.inicio)} · ${dur(s.duracion_s)}"></i>`;
+  }).join("");
+
+  const vals = serie.map(s => s.duracion_s);
+  const ultima = vals[vals.length-1];
+  const previas = vals.slice(0,-1);
+  const media = previas.reduce((a,b)=>a+b,0) / (previas.length||1);
+  const pct = media ? Math.round((ultima - media) / media * 100) : 0;
+  const flecha = pct > 15 ? `<b class="up">▲ ${pct}%</b>` : pct < -15 ? `<b class="down">▼ ${Math.abs(pct)}%</b>` : `${pct >= 0 ? "+" : ""}${pct}%`;
+
+  return `<div class="spark">${barras}</div>
+          <div class="trend">${serie.length} ejecuciones · media ${dur(media)} · última ${flecha}</div>`;
 }
 
 function pintarTablaProc(){

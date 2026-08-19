@@ -485,6 +485,16 @@ def main() -> int:
         return 1
 
     render(payload, Path(args.out))
+
+    try:
+        import historico
+
+        historico.registrar_runbooks(
+            Path(args.out), payload.get("historico", []), payload.get("counts", {})
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[AVISO] Historico no disponible: {exc}")
+
     print(
         f"OK -> {args.out}/procesos.json | estado={payload['overall']} | "
         f"procesos={len(payload['procesos'])} errores={payload['total_errores']} "

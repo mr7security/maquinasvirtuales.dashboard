@@ -108,6 +108,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.servir_datos()
         if ruta == "/api/procesos":
             return self.servir_procesos()
+        if ruta == "/api/tendencia":
+            return self.servir_tendencia()
         if ruta == "/csv":
             return self.servir_csv()
         if ruta == "/logo":
@@ -168,6 +170,17 @@ class Handler(BaseHTTPRequestHandler):
             ).encode("utf-8")
             return self.responder(200, "application/json; charset=utf-8", cuerpo)
         return self.responder(200, "application/json; charset=utf-8", ruta.read_bytes())
+
+    def servir_tendencia(self) -> None:
+        try:
+            sys.path.insert(0, str(self.app_dir))
+            import historico
+
+            datos = historico.tendencias(self.data_dir)
+        except Exception as exc:  # noqa: BLE001
+            datos = {"runbooks": {}, "copias": {}, "estado": [], "error": str(exc)}
+        cuerpo = json.dumps(datos, ensure_ascii=False).encode("utf-8")
+        self.responder(200, "application/json; charset=utf-8", cuerpo)
 
     def servir_csv(self) -> None:
         datos = self.leer_datos()

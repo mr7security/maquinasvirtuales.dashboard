@@ -251,12 +251,51 @@ Fuera de alcance por ahora, documentado por si se retoma:
 | `/` | La interfaz (`dashboard.html`) |
 | `/api/data` | Copias y máquinas virtuales. La página lo consulta cada 60 s |
 | `/api/procesos` | Estado de los runbooks de Automation |
+| `/api/tendencia` | Series históricas de duración leídas del SQLite local |
 | `/csv` | Exportación del estado actual, separada por `;` y con BOM para Excel |
 | `/logo` | `logo.png` del directorio de la aplicación, si existe |
 | `/salud` | Devuelve el estado global en texto plano; 503 si aún no hay datos |
 
 `collect.py` escribe `data.json` de forma atómica, así que la página nunca lee un
 fichero a medio escribir.
+
+## Histórico local
+
+Azure conserva poco: los jobs de copia rondan los 30 días y los de Automation
+menos. Cada recogida vuelca lo nuevo a `public/historico.sqlite`, lo que permite:
+
+- **Cronología de la cadena nocturna** — barra de tiempo con la ejecución de anoche:
+  cuándo arrancó cada runbook, cuánto duró y a qué hora terminó la cadena completa
+- **Tendencia de duración** — minigráfico en cada proceso con sus últimas ejecuciones
+  y la variación de la última frente a su media. Un proceso que pasa de 20 a 55
+  minutos avisa semanas antes de dar problemas
+
+Las inserciones son idempotentes: recoger dos veces la misma ejecución no duplica.
+La base crece muy despacio (unos pocos MB al año) y no necesita mantenimiento.
+
+## Coste mensual
+
+Si el Service Principal tiene el rol **Cost Management Reader** sobre la
+suscripción, cada grupo muestra su gasto del mes en curso y el total sale en el
+resumen:
+
+```
+az role assignment create --assignee <appId> --role "Cost Management Reader" --scopes "/subscriptions/<sub>"
+```
+
+Se agrupa por grupo de recursos y no por máquina a propósito: el coste de una VM
+se reparte entre varios recursos (discos, tarjetas de red, IPs), y sumarlo por
+grupo de recursos es lo único que da una cifra honesta. Para que el reparto entre
+áreas sea correcto, cada grupo de recursos debería pertenecer a una sola área.
+
+Con `COSTES=0` en el `.env` se desactiva.
+
+## Caducidad del secreto
+
+`AZURE_SECRET_EXPIRA=AAAA-MM-DD` en el `.env` hace que el dashboard avise 30 días
+antes de que caduque el secreto del Service Principal. Anótalo al crear o rotar el
+secreto: si caduca, el colector deja de recoger datos y es una avería difícil de
+relacionar con su causa.
 
 ## Interfaz
 

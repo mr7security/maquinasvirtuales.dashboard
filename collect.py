@@ -177,6 +177,71 @@ def cargar_grupos() -> dict:
     return cfg
 
 
+def dias_para_caducar() -> dict:
+    """Avisa antes de que caduque el secreto del Service Principal.
+
+    Es una averia silenciosa clasica: el secreto expira y el colector deja de
+    recoger datos sin que nadie relacione una cosa con la otra.
+    """
+    fecha = (os.environ.get("AZURE_SECRET_EXPIRA") or "").strip()
+    if not fecha:
+        return {}
+    try:
+        limite = datetime.fromisoformat(fecha).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return {"error": f"AZURE_SECRET_EXPIRA no tiene formato AAAA-MM-DD: {fecha}"}
+    restantes = (limite - datetime.now(timezone.utc)).days
+    return {"fecha": limite.date().isoformat(), "dias": restantes}
+
+
+def costes_por_grupo(credential, subscription_id: str) -> dict:
+    """Coste del mes en curso agrupado por grupo de recursos.
+
+    Se agrupa por grupo y no por maquina a proposito: el coste de una VM se
+    reparte entre varios recursos (discos, tarjetas de red, IPs publicas) y
+    sumarlo por grupo de recursos es lo unico que da una cifra honesta.
+    """
+    from azure.mgmt.costmanagement import CostManagementClient
+
+    cliente = CostManagementClient(credential)
+    ambito = f"/subscriptions/{subscription_id}"
+    consulta = {
+        "type": "ActualCost",
+        "timeframe": "MonthToDate",
+        "dataset": {
+            "granularity": "None",
+            "aggregation": {"total": {"name": "Cost", "function": "Sum"}},
+            "grouping": [{"type": "Dimension", "name": "ResourceGroupName"}],
+        },
+    }
+    resultado = cliente.query.usage(ambito, consulta)
+    d = model_dict(resultado)
+
+    columnas = [str(c.get("name") or "").lower() for c in (d.get("columns") or [])]
+    try:
+        i_coste = columnas.index("cost")
+    except ValueError:
+        i_coste = 0
+    try:
+        i_grupo = columnas.index("resourcegroupname")
+    except ValueError:
+        i_grupo = 1
+    i_moneda = columnas.index("currency") if "currency" in columnas else None
+
+    importes: dict[str, float] = {}
+    moneda = ""
+    for fila in d.get("rows") or []:
+        try:
+            grupo = str(fila[i_grupo]).lower()
+            importes[grupo] = importes.get(grupo, 0.0) + float(fila[i_coste])
+            if i_moneda is not None and not moneda:
+                moneda = str(fila[i_moneda])
+        except (IndexError, TypeError, ValueError):
+            continue
+
+    return {"por_grupo_recursos": importes, "moneda": moneda or "EUR"}
+
+
 def asignar_grupo(nombre: str, cfg: dict) -> dict:
     """Primera coincidencia manda; si ninguna encaja, va a 'otros'."""
     for grupo in cfg["grupos"]:
@@ -572,9 +637,41 @@ def collect_azure(days: int, sla_hours: float) -> dict:
         extra["ultima_duracion_s"] = (ultimo_job.get(extra["name"].lower()) or {}).get("duration_s")
 
     items.extend(other_protected)
-    return build_payload(
+
+    # ----------------------------------------------------------------------
+    # 4. Coste del mes en curso (opcional: requiere Cost Management Reader)
+    # ----------------------------------------------------------------------
+    costes = {}
+    if (env("COSTES", "1") or "1").lower() not in ("0", "no", "false"):
+        try:
+            costes = costes_por_grupo(credential, subscription_id)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(
+                "Costes no disponibles (hace falta el rol 'Cost Management Reader' "
+                f"sobre la suscripcion): {exc}"
+            )
+
+    payload = build_payload(
         vaults, items, jobs, days, sla_hours, errors, orphans, ignore_patterns, grupos_cfg
     )
+    payload["secreto"] = dias_para_caducar()
+
+    # Reparte el coste entre los grupos del dashboard. Si un grupo de recursos
+    # tuviera maquinas de dos grupos distintos su coste contaria en ambos, asi
+    # que conviene que cada grupo de recursos pertenezca a un solo area.
+    por_rg = costes.get("por_grupo_recursos") or {}
+    if por_rg:
+        for grupo in payload["grupos"]:
+            suyos = {
+                str(i.get("resource_group", "")).lower()
+                for i in items
+                if i.get("grupo") == grupo["nombre"]
+            }
+            grupo["coste"] = round(sum(por_rg.get(rg, 0.0) for rg in suyos), 2)
+        payload["coste_total"] = round(sum(por_rg.values()), 2)
+        payload["moneda"] = costes.get("moneda", "EUR")
+
+    return payload
 
 
 # --------------------------------------------------------------------------
@@ -828,6 +925,14 @@ def main() -> int:
         return 1
 
     render(payload, Path(args.out))
+
+    try:
+        import historico
+
+        historico.registrar_backups(Path(args.out), payload.get("jobs", []), payload.get("counts", {}))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[AVISO] Historico no disponible: {exc}")
+
     print(
         f"OK -> {args.out}/data.json | estado={payload['overall']} | "
         f"VMs={payload['total_vms']} protegidas={payload['vms_protegidas']} "

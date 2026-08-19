@@ -1,6 +1,7 @@
 azure-identity>=1.17.0
 azure-mgmt-automation>=1.0.0
 azure-mgmt-compute>=30.0.0
+azure-mgmt-costmanagement>=4.0.0
 azure-mgmt-network>=25.0.0
 azure-mgmt-recoveryservices>=3.0.0
 azure-mgmt-recoveryservicesbackup>=5.0.0
