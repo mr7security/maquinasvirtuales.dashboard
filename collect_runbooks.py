@@ -97,6 +97,31 @@ def texto_estado(valor) -> str:
     return texto[:1].upper() + texto[1:].lower() if texto else ""
 
 
+def hora_habitual(ejecuciones: list[dict]) -> tuple[int | None, int]:
+    """Minuto del dia (UTC) al que suele arrancar el proceso, por mediana.
+
+    Se deduce de las ejecuciones reales en lugar de las programaciones de Azure
+    por dos motivos comprobados en este entorno: hay runbooks que se disparan
+    desde fuera de Automation y no tienen programacion vinculada, y alguno que
+    la tiene la tiene desfasada respecto a lo que ocurre de verdad.
+    """
+    minutos = []
+    for e in ejecuciones:
+        if not e.get("inicio"):
+            continue
+        try:
+            dt = datetime.fromisoformat(str(e["inicio"]).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        dt = dt.astimezone(timezone.utc)
+        minutos.append(dt.hour * 60 + dt.minute)
+
+    if len(minutos) < 3:
+        return None, len(minutos)
+    minutos.sort()
+    return minutos[len(minutos) // 2], len(minutos)
+
+
 def clasificar(job: dict | None, esperada: str | None) -> str:
     """ok | warn | fail | sinejecutar | unknown."""
     if job is None:
@@ -179,11 +204,6 @@ def collect_azure(dias: int) -> dict:
     except Exception as exc:  # noqa: BLE001
         errores.append(f"Vinculos runbook-programacion: {exc}")
 
-    if programas and not enlaces:
-        errores.append(
-            "Hay programaciones en la cuenta pero ninguna aparece vinculada a un runbook. "
-            "Sin ese vinculo no se puede avisar de un proceso que no se haya ejecutado."
-        )
 
     # ----------------------------------------------------------------------
     # 2. Runbooks a vigilar
@@ -285,30 +305,50 @@ def collect_azure(dias: int) -> dict:
             if ultima["excepcion"] and ultima["excepcion"] not in ultima["errores"]:
                 ultima["errores"].insert(0, ultima["excepcion"])
 
-        # Cuando deberia haber corrido por ultima vez, segun su programacion
-        esperada, horario_txt = None, ""
-        for nombre_prog in enlaces.get(nombre, []):
-            prog = programas.get(nombre_prog)
-            if not prog or not prog.get("activa") or not prog.get("proxima"):
-                continue
-            paso = intervalo_a_timedelta(prog["frecuencia"], prog["intervalo"])
-            if not paso:
-                continue
-            try:
-                proxima = datetime.fromisoformat(prog["proxima"].replace("Z", "+00:00"))
-            except Exception:  # noqa: BLE001
-                continue
-            candidata = proxima - paso
-            if esperada is None or candidata > esperada:
-                esperada = candidata
-            partes = [prog["frecuencia"].lower()]
-            if prog.get("intervalo") and int(prog["intervalo"]) != 1:
-                partes.insert(0, f"cada {prog['intervalo']}")
-            horario_txt = " ".join(partes) + " · próx. " + proxima.astimezone().strftime("%d/%m %H:%M")
+        # ¿Cuando deberia haber corrido por ultima vez?
+        # Fuente principal: la hora a la que se ejecuta de verdad.
+        esperada, horario_txt, origen = None, "", ""
+        mediana, muestras = hora_habitual(ejecuciones)
 
-        # Damos un margen para no avisar mientras el proceso aun esta corriendo
-        limite = iso(esperada + timedelta(hours=MARGEN_HORAS)) if esperada else None
-        esperada_iso = iso(esperada) if esperada and iso(ahora) > (limite or "") else None
+        if mediana is not None:
+            base = ahora.replace(
+                hour=mediana // 60, minute=mediana % 60, second=0, microsecond=0
+            )
+            # Si la de hoy todavia no ha vencido, la referencia es la de ayer
+            if ahora < base + timedelta(hours=MARGEN_HORAS):
+                base -= timedelta(days=1)
+            esperada = base
+            origen = "historico"
+            horario_txt = (
+                f"habitual {base.astimezone().strftime('%H:%M')} "
+                f"(mediana de {muestras} ejecuciones)"
+            )
+        else:
+            # Respaldo: la programacion configurada en Azure
+            for nombre_prog in enlaces.get(nombre, []):
+                prog = programas.get(nombre_prog)
+                if not prog or not prog.get("activa") or not prog.get("proxima"):
+                    continue
+                paso = intervalo_a_timedelta(prog["frecuencia"], prog["intervalo"])
+                if not paso:
+                    continue
+                try:
+                    proxima = datetime.fromisoformat(prog["proxima"].replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                candidata = proxima - paso
+                if esperada is None or candidata > esperada:
+                    esperada = candidata
+                    origen = "programacion"
+                    horario_txt = (
+                        f"{prog['frecuencia'].lower()} · próx. "
+                        + proxima.astimezone().strftime("%d/%m %H:%M")
+                    )
+
+        # Margen para no avisar mientras el proceso todavia esta corriendo
+        esperada_iso = None
+        if esperada and ahora > esperada + timedelta(hours=MARGEN_HORAS):
+            esperada_iso = iso(esperada)
 
         estado = clasificar(ultima, esperada_iso)
 
@@ -327,6 +367,7 @@ def collect_azure(dias: int) -> dict:
                 "n_errores": len((ultima or {}).get("errores", [])),
                 "n_advertencias": len((ultima or {}).get("advertencias", [])),
                 "horario": horario_txt,
+                "horario_origen": origen,
                 "esperada": iso(esperada) if esperada else None,
                 "ejecuciones": len(ejecuciones),
             }
