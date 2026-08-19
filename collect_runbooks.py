@@ -71,6 +71,18 @@ def intervalo_a_timedelta(frecuencia: str, intervalo) -> timedelta | None:
     return None
 
 
+def texto_estado(valor) -> str:
+    """Normaliza el estado de un job.
+
+    El SDK devuelve un enum, y su representacion en texto es 'JobStatus.COMPLETED'.
+    Nos quedamos solo con la parte util: 'Completed'.
+    """
+    texto = str(getattr(valor, "value", valor) or "").strip()
+    if "." in texto and " " not in texto:
+        texto = texto.rsplit(".", 1)[-1]
+    return texto[:1].upper() + texto[1:].lower() if texto else ""
+
+
 def clasificar(job: dict | None, esperada: str | None) -> str:
     """ok | warn | fail | sinejecutar | unknown."""
     if job is None:
@@ -135,7 +147,7 @@ def collect_azure(dias: int) -> dict:
             programas[str(prog.name)] = {
                 "nombre": str(prog.name),
                 "activa": bool(d.get("isEnabled", True)),
-                "frecuencia": str(d.get("frequency") or ""),
+                "frecuencia": texto_estado(d.get("frequency") or getattr(prog, "frequency", "")),
                 "intervalo": d.get("interval"),
                 "proxima": iso(d.get("nextRun")),
             }
@@ -152,6 +164,12 @@ def collect_azure(dias: int) -> dict:
                 enlaces.setdefault(runbook, []).append(horario)
     except Exception as exc:  # noqa: BLE001
         errores.append(f"Vinculos runbook-programacion: {exc}")
+
+    if programas and not enlaces:
+        errores.append(
+            "Hay programaciones en la cuenta pero ninguna aparece vinculada a un runbook. "
+            "Sin ese vinculo no se puede avisar de un proceso que no se haya ejecutado."
+        )
 
     # ----------------------------------------------------------------------
     # 2. Runbooks a vigilar
@@ -230,7 +248,7 @@ def collect_azure(dias: int) -> dict:
                     {
                         "job": str(job.name),
                         "runbook": nombre,
-                        "estado": str(pick(d, job.properties, "status", "status") or ""),
+                        "estado": texto_estado(pick(d, job.properties, "status", "status")),
                         "detalle_estado": str(
                             pick(d, job.properties, "statusDetails", "status_details") or ""
                         ),

@@ -287,6 +287,12 @@ const jobState = s => { s = (s||"").toLowerCase();
   if(s.includes("complet") || s.includes("success")) return "ok";
   return "unknown"; };
 const tipo = t => String(t).replace("AzureIaasVM","VM Azure").replace("AzureStorage","Azure Files");
+// "JobStatus.COMPLETED" -> "Completed"; el SDK a veces entrega el enum en crudo
+const limpiaEstado = s => {
+  let t = String(s ?? "").trim();
+  if(t.includes(".") && !t.includes(" ")) t = t.split(".").pop();
+  return t ? t[0].toUpperCase() + t.slice(1).toLowerCase() : "";
+};
 
 /* ---------- cartel de sin conexion ---------- */
 function updateOverlay(){
@@ -572,7 +578,7 @@ function pintarProcesos(){
         <span class="cuando">${x.inicio ? fmt(x.inicio) + " · " + ago(x.inicio) : "sin ejecuciones registradas"}</span>
       </div>
       <div class="sub">
-        Azure dice: <b>${esc(x.ultimo_estado || "—")}</b>
+        Azure dice: <b>${esc(limpiaEstado(x.ultimo_estado) || "—")}</b>
         ${x.duracion_s != null ? " · " + dur(x.duracion_s) : ""}
         ${x.n_errores || x.n_advertencias
           ? ` · ${x.n_errores} errores, ${x.n_advertencias} advertencias` : " · sin errores ni advertencias"}
@@ -595,7 +601,7 @@ function pintarProcesos(){
 function pintarTablaProc(){
   const p = PROC;
   const term = $("qp").value.toLowerCase(), filtro = $("fp").value;
-  const malo = j => (j.estado||"").toLowerCase() !== "completed" || (j.errores||[]).length;
+  const malo = j => limpiaEstado(j.estado).toLowerCase() !== "completed" || (j.errores||[]).length;
   const rows = (p.historico||[]).filter(j => {
     if(term && !((j.runbook + " " + j.estado).toLowerCase().includes(term))) return false;
     if(filtro === "fail") return malo(j);
@@ -607,7 +613,7 @@ function pintarTablaProc(){
     const st = malo(j) ? "alarm" : "ok";
     return `<tr>
       <td>${esc(j.runbook)}</td>
-      <td><span class="pill ${st}">${esc(j.estado)}</span>
+      <td><span class="pill ${st}">${esc(limpiaEstado(j.estado))}</span>
           ${(j.errores||[]).length ? `<div class="errtxt">${esc(j.errores.join(" · "))}</div>` : ""}</td>
       <td>${fmt(j.inicio)}</td><td>${fmt(j.fin)}</td>
       <td>${dur(_dursec(j))}</td>
