@@ -154,7 +154,35 @@ def parse_rg(resource_id: str) -> str:
 
 def matches_any(name: str, patterns: list[str]) -> bool:
     lowered = (name or "").lower()
-    return any(fnmatch.fnmatch(lowered, p.lower()) for p in patterns)
+    return any(fnmatch.fnmatch(lowered, str(p).lower()) for p in patterns or [])
+
+
+OTROS_POR_DEFECTO = {"nombre": "Sin clasificar", "color": "#f59e0b", "exentas": False}
+
+
+def cargar_grupos() -> dict:
+    """Lee grupos.json: agrupacion de tarjetas, color y exencion de copia."""
+    ruta = Path(os.environ.get("GROUPS_FILE") or (BASE_DIR / "grupos.json"))
+    cfg = {"grupos": [], "otros": dict(OTROS_POR_DEFECTO)}
+    if not ruta.exists():
+        return cfg
+    try:
+        datos = json.loads(ruta.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[AVISO] No se pudo leer {ruta}: {exc}", file=sys.stderr)
+        return cfg
+    cfg["grupos"] = [g for g in (datos.get("grupos") or []) if isinstance(g, dict)]
+    if isinstance(datos.get("otros"), dict):
+        cfg["otros"].update(datos["otros"])
+    return cfg
+
+
+def asignar_grupo(nombre: str, cfg: dict) -> dict:
+    """Primera coincidencia manda; si ninguna encaja, va a 'otros'."""
+    for grupo in cfg["grupos"]:
+        if matches_any(nombre, grupo.get("patrones")):
+            return grupo
+    return cfg["otros"]
 
 
 def classify_backup(
@@ -227,6 +255,7 @@ def collect_azure(days: int, sla_hours: float) -> dict:
     backup_client = RecoveryServicesBackupClient(credential, subscription_id)
 
     ignore_patterns = env_list("VM_IGNORE_PATTERNS")
+    grupos_cfg = cargar_grupos()
     errors: list[str] = []
     now = datetime.now(timezone.utc)
     start = now - timedelta(days=days)
@@ -302,6 +331,7 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                     backups_by_resource[source_id.lower()] = record
                 else:
                     # Azure Files y demas cargas no ligadas a una VM
+                    grupo = asignar_grupo(str(friendly), grupos_cfg)
                     record.update(
                         {
                             "kind": "share",
@@ -309,8 +339,14 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                                 str(pick(d, p, "sourceResourceId", "source_resource_id") or "")
                             )
                             or vrg,
+                            "location": "",
+                            "power_state": "",
+                            "os": "",
+                            "size": "",
                             "state": record["backup_state"],
                             "protected": True,
+                            "grupo": grupo.get("nombre", ""),
+                            "grupo_color": grupo.get("color", "#94a3b8"),
                         }
                     )
                     other_protected.append(record)
@@ -378,11 +414,12 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                     power = ""
 
             backup = backups_by_resource.pop(vm_id.lower(), None)
-            ignored = matches_any(name, ignore_patterns)
+            grupo = asignar_grupo(name, grupos_cfg)
+            exenta = bool(grupo.get("exentas")) or matches_any(name, ignore_patterns)
 
             if backup:
                 state = backup["backup_state"]
-            elif ignored:
+            elif exenta:
                 state = "exento"
             else:
                 state = "sincopia"
@@ -391,6 +428,8 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                 {
                     "kind": "vm",
                     "name": name,
+                    "grupo": grupo.get("nombre", ""),
+                    "grupo_color": grupo.get("color", "#94a3b8"),
                     "resource_group": parse_rg(vm_id),
                     "location": str(getattr(vm, "location", "") or d.get("location") or ""),
                     "power_state": power,
@@ -417,7 +456,9 @@ def collect_azure(days: int, sla_hours: float) -> dict:
     orphans = len(backups_by_resource)
 
     items.extend(other_protected)
-    return build_payload(vaults, items, jobs, days, sla_hours, errors, orphans, ignore_patterns)
+    return build_payload(
+        vaults, items, jobs, days, sla_hours, errors, orphans, ignore_patterns, grupos_cfg
+    )
 
 
 # --------------------------------------------------------------------------
@@ -428,7 +469,8 @@ def collect_azure(days: int, sla_hours: float) -> dict:
 def collect_demo(days: int, sla_hours: float) -> dict:
     vaults = [{"name": "STNCERAMICA-backup", "resource_group": "rg_backup", "location": "westeurope"}]
     now = datetime.now(timezone.utc)
-    ignore_patterns = ["sgp-dev*", "sgp-pruebas*"]
+    ignore_patterns: list[str] = []
+    grupos_cfg = cargar_grupos()
 
     plantilla = [
         ("vmproaddc1", "rg_ad", "running", "Windows", "Standard_B1ms", True, "Completed", 14),
@@ -446,9 +488,10 @@ def collect_demo(days: int, sla_hours: float) -> dict:
 
     for name, rg, power, so, size, protegida, status, horas in plantilla:
         last = iso(now - timedelta(hours=horas)) if protegida else None
+        grupo = asignar_grupo(name, grupos_cfg)
         if protegida:
             state = classify_backup(status, last, sla_hours)
-        elif matches_any(name, ignore_patterns):
+        elif grupo.get("exentas"):
             state = "exento"
         else:
             state = "sincopia"
@@ -457,6 +500,8 @@ def collect_demo(days: int, sla_hours: float) -> dict:
             {
                 "kind": "vm",
                 "name": name,
+                "grupo": grupo.get("nombre", ""),
+                "grupo_color": grupo.get("color", "#94a3b8"),
                 "resource_group": rg,
                 "location": "westeurope",
                 "power_state": power,
@@ -496,10 +541,13 @@ def collect_demo(days: int, sla_hours: float) -> dict:
                     }
                 )
 
+    grupo_share = asignar_grupo("informatica", grupos_cfg)
     items.append(
         {
             "kind": "share",
             "name": "informatica (integracion365fo)",
+            "grupo": grupo_share.get("nombre", ""),
+            "grupo_color": grupo_share.get("color", "#94a3b8"),
             "resource_group": "rg_backup",
             "location": "westeurope",
             "power_state": "",
@@ -519,7 +567,7 @@ def collect_demo(days: int, sla_hours: float) -> dict:
         }
     )
 
-    payload = build_payload(vaults, items, jobs, days, sla_hours, [], 4, ignore_patterns)
+    payload = build_payload(vaults, items, jobs, days, sla_hours, [], 4, ignore_patterns, grupos_cfg)
     payload["demo"] = True
     return payload
 
@@ -531,7 +579,9 @@ def collect_demo(days: int, sla_hours: float) -> dict:
 ORDEN_ESTADO = {"fail": 0, "sincopia": 1, "warn": 2, "unknown": 3, "exento": 4, "ok": 5}
 
 
-def build_payload(vaults, items, jobs, days, sla_hours, errors, orphans, ignore_patterns) -> dict:
+def build_payload(
+    vaults, items, jobs, days, sla_hours, errors, orphans, ignore_patterns, grupos_cfg=None
+) -> dict:
     jobs.sort(key=lambda j: j.get("start_time") or "", reverse=True)
     items.sort(key=lambda i: (ORDEN_ESTADO.get(i.get("state"), 9), i.get("name", "").lower()))
 
@@ -543,6 +593,28 @@ def build_payload(vaults, items, jobs, days, sla_hours, errors, orphans, ignore_
         counts[state] = counts.get(state, 0) + 1
 
     vms = [i for i in items if i.get("kind") == "vm"]
+
+    # Grupos en el orden del fichero de configuracion, con su resumen.
+    # Solo se publican los que tienen al menos un elemento.
+    cfg = grupos_cfg or {"grupos": [], "otros": dict(OTROS_POR_DEFECTO)}
+    grupos = []
+    for definicion in list(cfg["grupos"]) + [cfg["otros"]]:
+        nombre = definicion.get("nombre", "")
+        miembros = [i for i in items if i.get("grupo") == nombre]
+        if not miembros:
+            continue
+        resumen = {"ok": 0, "warn": 0, "fail": 0, "sincopia": 0, "exento": 0, "unknown": 0}
+        for m in miembros:
+            resumen[m.get("state", "unknown")] = resumen.get(m.get("state", "unknown"), 0) + 1
+        grupos.append(
+            {
+                "nombre": nombre,
+                "color": definicion.get("color", "#94a3b8"),
+                "exentas": bool(definicion.get("exentas")),
+                "total": len(miembros),
+                "counts": resumen,
+            }
+        )
 
     if counts["fail"] or failed_jobs:
         overall = "fail"
@@ -558,6 +630,7 @@ def build_payload(vaults, items, jobs, days, sla_hours, errors, orphans, ignore_
         "overall": overall,
         "counts": counts,
         "vaults": vaults,
+        "grupos": grupos,
         "items": items,
         "jobs": jobs,
         "failed_jobs": len(failed_jobs),
@@ -609,6 +682,7 @@ def main() -> int:
             "overall": "fail",
             "counts": {"ok": 0, "warn": 0, "fail": 0, "sincopia": 0, "exento": 0, "unknown": 0},
             "vaults": [],
+            "grupos": [],
             "items": [],
             "jobs": [],
             "failed_jobs": 0,

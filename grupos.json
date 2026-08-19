@@ -1,0 +1,56 @@
+{
+  "_comentario": [
+    "Agrupacion de las tarjetas del dashboard, al estilo de las sedes del de sensores.",
+    "Se evalua en orden: la primera coincidencia manda. Los patrones admiten comodines",
+    "(glob) y no distinguen mayusculas: vmpro*, sgp-dev*, VDI-*.",
+    "",
+    "  exentas: true  -> que una maquina de este grupo no tenga copia NO genera aviso.",
+    "                    Se muestra en gris. Usalo para desarrollo, pruebas y VDI.",
+    "  exentas: false -> una maquina sin copia sale en morado y cuenta como incidencia.",
+    "",
+    "Los colores identifican el grupo y estan elegidos FUERA del semaforo de estado",
+    "(verde / ambar / rojo / morado) para no confundirse con las alarmas.",
+    "",
+    "Este fichero es configuracion: install.sh no lo sobrescribe si ya existe."
+  ],
+
+  "grupos": [
+    {
+      "nombre": "Sistemas / Infraestructuras",
+      "color": "#38bdf8",
+      "exentas": false,
+      "patrones": [
+        "vmproaddc1",
+        "vmproadrds01",
+        "vmprocitrxapp02",
+        "informatica*"
+      ]
+    },
+    {
+      "nombre": "Desarrollo",
+      "color": "#a78bfa",
+      "exentas": true,
+      "patrones": [
+        "sgp-dev*"
+      ]
+    },
+    {
+      "nombre": "Testing",
+      "color": "#f472b6",
+      "exentas": true,
+      "patrones": [
+        "AVDVM-*",
+        "AA-PingVm-*",
+        "sgp-pruebas*",
+        "VDI-*",
+        "VDIVM-*"
+      ]
+    }
+  ],
+
+  "otros": {
+    "nombre": "Sin clasificar",
+    "color": "#f59e0b",
+    "exentas": false
+  }
+}
