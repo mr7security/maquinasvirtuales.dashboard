@@ -71,6 +71,20 @@ def intervalo_a_timedelta(frecuencia: str, intervalo) -> timedelta | None:
     return None
 
 
+def props(obj) -> dict:
+    """Propiedades del recurso, ya bajadas al nivel correcto.
+
+    as_dict() sobre un recurso de Azure devuelve {id, name, properties: {...}}.
+    Casi todo lo que interesa (isEnabled, frequency, nextRun, runbook, schedule)
+    esta dentro de 'properties', no en la raiz.
+    """
+    interior = model_dict(getattr(obj, "properties", None))
+    if interior:
+        return interior
+    entero = model_dict(obj)
+    return entero.get("properties") or entero
+
+
 def texto_estado(valor) -> str:
     """Normaliza el estado de un job.
 
@@ -143,11 +157,11 @@ def collect_azure(dias: int) -> dict:
     programas: dict[str, dict] = {}
     try:
         for prog in client.schedule.list_by_automation_account(grupo, cuenta):
-            d = model_dict(prog)
+            d = props(prog)
             programas[str(prog.name)] = {
                 "nombre": str(prog.name),
                 "activa": bool(d.get("isEnabled", True)),
-                "frecuencia": texto_estado(d.get("frequency") or getattr(prog, "frequency", "")),
+                "frecuencia": texto_estado(d.get("frequency")),
                 "intervalo": d.get("interval"),
                 "proxima": iso(d.get("nextRun")),
             }
@@ -157,9 +171,9 @@ def collect_azure(dias: int) -> dict:
     enlaces: dict[str, list[str]] = {}
     try:
         for enlace in client.job_schedule.list_by_automation_account(grupo, cuenta):
-            d = model_dict(enlace)
-            runbook = ((d.get("runbook") or {}).get("name") or "").strip()
-            horario = ((d.get("schedule") or {}).get("name") or "").strip()
+            d = props(enlace)
+            runbook = str((d.get("runbook") or {}).get("name") or "").strip()
+            horario = str((d.get("schedule") or {}).get("name") or "").strip()
             if runbook and horario:
                 enlaces.setdefault(runbook, []).append(horario)
     except Exception as exc:  # noqa: BLE001
@@ -206,7 +220,7 @@ def collect_azure(dias: int) -> dict:
         except Exception:  # noqa: BLE001
             sueltos = []
             for job in client.job.list_by_automation_account(grupo, cuenta):
-                d = model_dict(job)
+                d = props(job)
                 if ((d.get("runbook") or {}).get("name") or "") == nombre:
                     sueltos.append(job)
                 if len(sueltos) > 60:
@@ -221,7 +235,7 @@ def collect_azure(dias: int) -> dict:
                 grupo, cuenta, job_name, filter=f"properties/streamType eq '{tipo}'"
             )
             for stream in flujo:
-                d = model_dict(stream)
+                d = props(stream)
                 texto = d.get("summary") or (d.get("streamText") or "")
                 if texto:
                     mensajes.append(str(texto).strip()[:600])
@@ -238,7 +252,7 @@ def collect_azure(dias: int) -> dict:
         ejecuciones = []
         try:
             for job in jobs_de(nombre):
-                d = model_dict(job)
+                d = props(job)
                 inicio = iso(pick(d, job.properties, "startTime", "start_time")) or iso(
                     pick(d, job.properties, "creationTime", "creation_time")
                 )
