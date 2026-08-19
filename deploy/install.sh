@@ -44,7 +44,11 @@ install -m 644 "$SRC_DIR/requirements.txt" "$APP_DIR/requirements.txt"
 # grupos.json es configuracion: no se pisa si ya existe en el servidor
 [[ -f "$APP_DIR/grupos.json" ]] || install -m 644 "$SRC_DIR/grupos.json" "$APP_DIR/grupos.json"
 rm -f "$APP_DIR/dashboard_template.html" "$APP_DIR/public/index.html"
-if [[ -f "$SRC_DIR/logo.png" ]]; then install -m 644 "$SRC_DIR/logo.png" "$APP_DIR/logo.png"; fi
+for ext in png jpg svg; do
+    if [[ -f "$SRC_DIR/logo.$ext" ]]; then
+        install -m 644 "$SRC_DIR/logo.$ext" "$APP_DIR/logo.$ext"
+    fi
+done
 [[ -f "$APP_DIR/.env" ]] || install -m 600 "$SRC_DIR/.env.example" "$APP_DIR/.env"
 
 echo "==> Creando el entorno virtual"
