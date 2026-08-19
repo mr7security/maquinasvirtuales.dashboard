@@ -227,13 +227,15 @@ fichero a medio escribir.
 
 Misma estética que `dashboard-sensores` y `dashboard-radioenlaces`. Incluye:
 
-- **Modo TV** — pantalla completa con rejilla que llena el monitor, oculta filtros,
-  gráfico y tabla. Pensado para dejarlo puesto en una pantalla del departamento
-- **Alertas** — pitido y notificación del navegador cuando un elemento pasa a fallo
-  o se queda sin copia. El interruptor se recuerda en el navegador
-- **Overlay de sin conexión** — en modo TV, si el servidor deja de responder aparece
-  el cartel a pantalla completa con el tiempo transcurrido
+- **Resumen en franja** — contadores centrados en una línea con separadores
+- **Tarjetas compactas** agrupadas por área, con el color del grupo
+- **Cartel de sin conexión** — si el servidor deja de responder durante tres sondeos
+  seguidos aparece a pantalla completa con el tiempo transcurrido
 - **Aviso de datos obsoletos** — si el colector lleva más de 90 minutos sin ejecutarse
+
+No lleva modo TV, alertas sonoras ni botón de descarga: este panel se consulta desde
+el navegador, no se deja puesto en un monitor. La ruta `/csv` sigue disponible por si
+alguien quiere la exportación, simplemente no hay botón.
 
 ## Si prefieres cron en vez de systemd
 

@@ -8,7 +8,7 @@
   :root{
     --bg:#0f172a; --card:#1e293b; --card2:#0f1c30; --text:#e2e8f0; --muted:#94a3b8;
     --ok:#22c55e; --alarm:#ef4444; --warn:#f59e0b; --off:#64748b; --accent:#38bdf8;
-    --nobkp:#a78bfa;
+    --nobkp:#a78bfa; --linea:#334155;
   }
   *{box-sizing:border-box; margin:0; padding:0}
   body{background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; padding:18px 22px}
@@ -16,26 +16,23 @@
   h1{font-size:1.3rem; font-weight:600; text-transform:uppercase; letter-spacing:.03em}
   h1 span{color:var(--accent)}
   #clock{font-size:1.05rem; color:var(--muted); font-variant-numeric:tabular-nums}
-  .btns{display:flex; gap:8px; flex-wrap:wrap}
-  .btn{background:var(--card); color:var(--text); border:1px solid #334155; border-radius:8px;
+  .btn{background:var(--card); color:var(--text); border:1px solid var(--linea); border-radius:8px;
        padding:7px 13px; font-size:.85rem; cursor:pointer; text-transform:uppercase; letter-spacing:.02em}
   .btn:hover{border-color:var(--accent)}
-  .btn.active{background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:600}
   #banner{display:none; background:#3a2b12; border:1px solid var(--warn); border-radius:10px;
           padding:12px 16px; margin-bottom:14px; font-size:.85rem}
   #banner.show{display:block}
   #banner.bad{background:#3b1f2b; border-color:var(--alarm)}
   #banner ul{margin:6px 0 0 18px}
 
-  /* ---------- resumen ---------- */
-  #kpis{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px}
-  .kpi{background:var(--card); border-radius:12px; padding:10px 16px; min-width:110px; border-left:4px solid var(--off)}
-  .kpi .n{font-size:1.9rem; font-weight:800; line-height:1.1; font-variant-numeric:tabular-nums}
-  .kpi .l{font-size:.66rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:2px}
-  .kpi.ok{border-left-color:var(--ok)} .kpi.ok .n{color:var(--ok)}
-  .kpi.warn{border-left-color:var(--warn)} .kpi.warn .n{color:var(--warn)}
-  .kpi.alarm{border-left-color:var(--alarm)} .kpi.alarm .n{color:var(--alarm)}
-  .kpi.nobkp{border-left-color:var(--nobkp)} .kpi.nobkp .n{color:var(--nobkp)}
+  /* ---------- resumen: franja centrada con separadores ---------- */
+  #kpis{display:flex; justify-content:center; align-items:stretch; flex-wrap:wrap; margin:4px 0 18px}
+  .kpi{padding:0 26px; text-align:center}
+  .kpi .n{font-size:1.9rem; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:.63rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-top:3px}
+  .kpi.ok .n{color:var(--ok)} .kpi.warn .n{color:var(--warn)}
+  .kpi.alarm .n{color:var(--alarm)} .kpi.nobkp .n{color:var(--nobkp)}
+  .sep{width:1px; background:var(--linea); margin:2px 0}
 
   .pill{border-radius:99px; padding:3px 12px; font-weight:600; text-transform:uppercase;
         letter-spacing:.02em; font-size:.78rem}
@@ -47,7 +44,7 @@
 
   /* ---------- filtros ---------- */
   .tools{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px}
-  input[type=search],select{background:var(--card); color:var(--text); border:1px solid #334155;
+  input[type=search],select{background:var(--card); color:var(--text); border:1px solid var(--linea);
         border-radius:8px; padding:7px 11px; font-size:.85rem; font-family:inherit}
   input[type=search]{min-width:230px}
   .count{font-size:.75rem; color:var(--muted)}
@@ -66,9 +63,9 @@
   .grupo-sum{display:flex; gap:8px; flex-wrap:wrap}
 
   /* ---------- tarjetas compactas ---------- */
-  .cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(238px,1fr)); gap:8px}
-  .card{background:var(--card); border-radius:10px; padding:8px 11px; border-left:4px solid var(--off);
-        display:flex; flex-direction:column; gap:4px}
+  .cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(196px,1fr)); gap:8px}
+  .card{background:var(--card); border-radius:10px; padding:8px 10px; border-left:4px solid var(--off);
+        display:flex; flex-direction:column; gap:3px; min-width:0}
   .card.ok{border-left-color:var(--ok)}
   .card.warn{border-left-color:var(--warn)}
   .card.fail{border-left-color:var(--alarm); animation:blink 1.2s infinite}
@@ -77,22 +74,21 @@
   @keyframes blink{50%{background:#3b1f2b}}
 
   .card-h{display:flex; justify-content:space-between; align-items:center; gap:6px}
-  .card-h h2{font-size:.86rem; font-weight:700; letter-spacing:.01em; word-break:break-word; line-height:1.25}
-  .status{font-size:.9rem; line-height:1; white-space:nowrap}
+  .card-h h2{font-size:.83rem; font-weight:700; line-height:1.25; overflow-wrap:anywhere}
+  .status{font-size:.88rem; line-height:1; white-space:nowrap}
   .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.fail{color:var(--alarm)}
   .status.sincopia{color:var(--nobkp)} .status.exento,.status.unknown{color:var(--off)}
 
-  .linea{display:flex; align-items:baseline; gap:6px; font-size:.76rem; line-height:1.3}
+  .linea{font-size:.74rem; line-height:1.3; overflow-wrap:anywhere}
   .linea .estado{font-weight:700}
   .linea .cuando{color:var(--muted); font-variant-numeric:tabular-nums}
   .v-ok{color:var(--ok)} .v-warn{color:var(--warn)} .v-alarm{color:var(--alarm)} .v-nobkp{color:var(--nobkp)}
-  .sub{font-size:.7rem; color:var(--muted); line-height:1.35; word-break:break-word}
-  .sub b{color:var(--text); font-weight:600}
-  .aviso{color:var(--warn); font-size:.7rem; font-weight:600}
+  .sub{font-size:.68rem; color:var(--muted); line-height:1.35; overflow-wrap:anywhere}
+  .aviso{color:var(--warn); font-size:.68rem; font-weight:600}
 
   .tags{display:flex; flex-wrap:wrap; gap:4px; margin-top:1px}
-  .tag{font-size:.6rem; padding:1px 7px; border-radius:99px; background:var(--card2);
-       border:1px solid #334155; color:var(--muted); letter-spacing:.02em; white-space:nowrap}
+  .tag{font-size:.59rem; padding:1px 7px; border-radius:99px; background:var(--card2);
+       border:1px solid var(--linea); color:var(--muted); white-space:nowrap}
   .tag.on{color:var(--ok); border-color:rgba(34,197,94,.45)}
   .tag.az{color:var(--accent); border-color:rgba(56,189,248,.35)}
 
@@ -105,40 +101,14 @@
   table{border-collapse:collapse; width:100%; font-size:.8rem}
   th{position:sticky; top:0; background:var(--card2); text-align:left; padding:10px 12px; cursor:pointer;
      font-size:.66rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
-     border-bottom:1px solid #334155; white-space:nowrap}
+     border-bottom:1px solid var(--linea); white-space:nowrap}
   td{padding:9px 12px; border-bottom:1px solid #1f2b3d; vertical-align:top}
   tr:last-child td{border-bottom:none}
   .errtxt{color:var(--alarm); font-size:.72rem; margin-top:3px; max-width:430px}
   .empty{padding:26px; text-align:center; color:var(--muted)}
   footer{color:var(--muted); font-size:.7rem; margin-top:26px; text-align:center}
 
-  /* ================= MODO TV ================= */
-  body.tv{padding:10px 12px; overflow:hidden}
-  body.tv header{margin-bottom:8px}
-  body.tv h1{font-size:1.1rem}
-  body.tv .btns .btn{padding:4px 9px; font-size:.72rem}
-  body.tv .tools, body.tv #jobsPanel, body.tv #chartPanel, body.tv footer,
-  body.tv h3, body.tv #banner{display:none}
-  body.tv #kpis{gap:6px; margin-bottom:8px}
-  body.tv .kpi{padding:5px 12px; min-width:0}
-  body.tv .kpi .n{font-size:clamp(1.2rem,2.2vw,2.6rem)}
-  body.tv .kpi .l{font-size:clamp(.55rem,.75vw,.9rem)}
-  body.tv #grupos{flex:1; min-height:0; gap:8px}
-  body.tv .grupo{min-height:0; display:flex; flex-direction:column; padding:6px 10px 8px}
-  body.tv .grupo-h{margin-bottom:4px}
-  body.tv .grupo-name{font-size:clamp(1rem, 1.6vw, 2.2rem)}
-  body.tv .grupo-sum .pill{padding:2px 8px; font-size:clamp(.6rem,.8vw,.95rem)}
-  body.tv .cards{flex:1; min-height:0; display:grid; gap:6px; grid-auto-rows:1fr;
-                 grid-auto-flow:column; grid-auto-columns:1fr; grid-template-columns:none}
-  body.tv .card{min-height:0; overflow:hidden; padding:7px 10px; justify-content:center; gap:3px}
-  body.tv .card-h h2{font-size:clamp(.85rem,1.25vw,1.8rem)}
-  body.tv .status{font-size:clamp(.85rem,1.2vw,1.7rem)}
-  body.tv .linea{font-size:clamp(.7rem,1vw,1.35rem)}
-  body.tv .sub{font-size:clamp(.6rem,.8vw,1.05rem)}
-  body.tv .tag{font-size:clamp(.55rem,.7vw,.9rem)}
-  body.tv .card .sub.secundaria, body.tv .card .tags{display:none}
-
-  /* ===== Overlay de sin conexion ===== */
+  /* ---------- cartel de sin conexion ---------- */
   #offline-overlay{position:fixed; inset:0; z-index:9999; display:none;
     flex-direction:column; align-items:center; justify-content:center; text-align:center;
     background:rgba(8,12,24,.96)}
@@ -158,14 +128,9 @@
   <div style="display:flex; align-items:center; gap:14px">
     <img id="logo" src="/logo" alt="" style="height:42px; display:none; background:#fff; border-radius:8px; padding:3px 8px"
          onload="this.style.display='block'">
-    <h1>Copias y máquinas virtuales — <span id="hsub">Azure</span></h1>
+    <h1>Copias y máquinas virtuales — <span>Azure</span></h1>
   </div>
-  <div class="btns">
-    <button class="btn" id="bAlert" onclick="toggleAlerts()">🔔 Alertas: OFF</button>
-    <button class="btn" id="bTV" onclick="toggleTV()">🖥️ Modo TV</button>
-    <button class="btn" onclick="location.href='/csv'">⬇ CSV</button>
-    <button class="btn" onclick="cargar(true)">⟳ Actualizar</button>
-  </div>
+  <button class="btn" onclick="cargar(true)">⟳ Actualizar</button>
   <div id="clock">--:--:--</div>
 </header>
 
@@ -186,11 +151,11 @@
 
 <div id="grupos"></div>
 
-<h3 id="h3chart">Jobs de copia por día</h3>
-<div class="panel" id="chartPanel"><div class="chartwrap"><canvas id="chart"></canvas></div></div>
+<h3>Jobs de copia por día</h3>
+<div class="panel"><div class="chartwrap"><canvas id="chart"></canvas></div></div>
 
-<h3 id="h3jobs">Histórico de jobs</h3>
-<div id="jobsPanel">
+<h3>Histórico de jobs</h3>
+<div>
   <div class="tools">
     <input type="search" id="qj" placeholder="Filtrar por máquina u operación…">
     <select id="fj">
@@ -229,17 +194,13 @@ const REFRESH_S = 60;          // sondeo del endpoint
 const STALE_MIN = 90;          // aviso si el colector lleva mas de esto sin correr
 
 let DATA = null;
-let alertsOn = localStorage.getItem("alertsOn") === "1";
-let prevBad = {};
 let lastOk = Date.now();
-let audioCtx = null;
 let chart = null;
 let sortKey = "start_time", sortDir = -1;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const ETIQ = {ok:"✔ OK", warn:"⚠ ATENCIÓN", fail:"✖ FALLO", sincopia:"◆ SIN COPIA",
-              exento:"— EXENTA", unknown:"? SIN DATOS"};
+const ICONO = {ok:"●", warn:"▲", fail:"✖", sincopia:"◆", exento:"—", unknown:"?"};
 
 const fmt = ts => { if(!ts) return "—";
   const d = new Date(ts); if(isNaN(d)) return "—";
@@ -257,71 +218,15 @@ const jobState = s => { s = (s||"").toLowerCase();
   return "unknown"; };
 const tipo = t => String(t).replace("AzureIaasVM","VM Azure").replace("AzureStorage","Azure Files");
 
-/* ---------- alertas ---------- */
-function beep(){
-  if(!alertsOn) return;
-  try{
-    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
-    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.connect(g); g.connect(audioCtx.destination);
-    o.frequency.value = 880; g.gain.value = .15;
-    o.start(); o.stop(audioCtx.currentTime + .4);
-  }catch(e){}
-}
-function notify(title, body){
-  if(!alertsOn || !("Notification" in window)) return;
-  if(Notification.permission === "granted") new Notification(title, {body});
-}
-function toggleAlerts(){
-  alertsOn = !alertsOn;
-  localStorage.setItem("alertsOn", alertsOn ? "1" : "0");
-  if(alertsOn && "Notification" in window && Notification.permission === "default")
-    Notification.requestPermission();
-  if(alertsOn) beep();
-  paintAlertBtn();
-}
-function paintAlertBtn(){
-  const b = $("bAlert");
-  b.textContent = "🔔 Alertas: " + (alertsOn ? "ON" : "OFF");
-  b.classList.toggle("active", alertsOn);
-}
-
-/* ---------- modo TV ---------- */
-function toggleTV(){
-  document.body.classList.toggle("tv");
-  const on = document.body.classList.contains("tv");
-  $("bTV").classList.toggle("active", on);
-  if(on) document.documentElement.requestFullscreen?.().catch(()=>{});
-  else if(document.fullscreenElement) document.exitFullscreen();
-  fitTV();
-}
-/* En modo TV los grupos se reparten el alto a partes iguales y las tarjetas
-   de cada uno forman una sola fila de columnas del mismo ancho. */
-function fitTV(){
-  const g = $("grupos");
-  g.style.height = "";
-  [...g.children].forEach(el => el.style.flex = "");
-  if(!document.body.classList.contains("tv")) return;
-  const header = document.querySelector("header");
-  const alto = window.innerHeight - header.offsetHeight - $("kpis").offsetHeight - 24;
-  g.style.height = Math.max(alto, 200) + "px";
-  [...g.children].forEach(el => el.style.flex = "1 1 0");
-}
-window.addEventListener("resize", fitTV);
-
-/* ---------- overlay ---------- */
+/* ---------- cartel de sin conexion ---------- */
 function updateOverlay(){
   const secs = Math.floor((Date.now() - lastOk) / 1000);
   const caido = secs > REFRESH_S * 3;
-  $("offline-overlay").classList.toggle("show", caido && document.body.classList.contains("tv"));
+  $("offline-overlay").classList.toggle("show", caido);
   const h = String(Math.floor(secs/3600)).padStart(2,"0");
   const m = String(Math.floor(secs%3600/60)).padStart(2,"0");
   const s = String(secs%60).padStart(2,"0");
   $("ov-timer").textContent = `${h}:${m}:${s}`;
-  if(caido && !document.body.classList.contains("tv")){
-    $("banner").className = "show bad";
-    $("banner").innerHTML = "<b>Sin conexión con el servidor.</b> Último dato recibido " + ago(lastOk) + ".";
-  }
 }
 
 /* ---------- carga ---------- */
@@ -343,13 +248,10 @@ async function cargar(manual){
 function pintar(){
   const d = DATA; if(!d) return;
 
-  $("hsub").textContent = (d.vaults||[]).map(v=>v.name).join(", ") || "Azure";
-
   // --- avisos ---
   const edadMin = (Date.now() - new Date(d.generated_at)) / 60000;
   let bannerHtml = "", bannerClass = "";
   const fallos = (d.items||[]).filter(i => i.state === "fail");
-  const atencion = (d.items||[]).filter(i => i.state === "warn");
   const sin = (d.items||[]).filter(i => i.state === "sincopia");
 
   if(d.demo) bannerHtml += "<b>Modo demo.</b> Datos de ejemplo, no reflejan el entorno real.<br>";
@@ -369,28 +271,20 @@ function pintar(){
   $("banner").className = bannerHtml ? "show " + bannerClass : "";
   $("banner").innerHTML = bannerHtml;
 
-  // --- alertas sonoras en las transiciones ---
-  (d.items||[]).forEach(i => {
-    const malo = i.state === "fail" || i.state === "sincopia";
-    if(malo && prevBad[i.name] === false){
-      beep();
-      notify(i.state === "fail" ? "⚠ Copia fallida — " + i.name : "◆ Sin copia — " + i.name,
-             i.last_backup_status || i.resource_group);
-    }
-    prevBad[i.name] = malo;
-  });
-
-  // --- KPIs ---
+  // --- resumen ---
   const c = d.counts || {};
-  $("kpis").innerHTML = [
+  const bloques = [
     ["", d.total_vms||0, "VMs"],
     ["", d.vms_encendidas||0, "Encendidas"],
     ["ok", d.vms_protegidas||0, "Con copia"],
     ["nobkp", c.sincopia||0, "Sin copia"],
     ["warn", c.warn||0, "Atención"],
-    ["alarm", c.fail||0, "Con fallo"],
+    ["alarm", c.fail||0, "Fallos"],
     ["alarm", d.failed_jobs||0, "Jobs fallidos"]
-  ].map(([k,n,l]) => `<div class="kpi ${k}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+  ];
+  $("kpis").innerHTML = bloques
+    .map(([k,n,l]) => `<div class="kpi ${k}"><div class="n">${n}</div><div class="l">${l}</div></div>`)
+    .join('<div class="sep"></div>');
 
   pintarCards();
   pintarChart();
@@ -398,13 +292,10 @@ function pintar(){
 
   const extras = [];
   if(d.huerfanos) extras.push(d.huerfanos + " copia(s) de VMs eliminadas, ocultas");
-  if((d.ignore_patterns||[]).length) extras.push("exentas: " + d.ignore_patterns.join(", "));
   $("foot").textContent = "Recogida " + fmt(d.generated_at) + " (" + ago(d.generated_at) + ")" +
     " · aviso si se superan " + d.sla_hours + " h sin copia correcta" +
     (extras.length ? " · " + extras.join(" · ") : "");
 }
-
-const ICONO = {ok:"●", warn:"▲", fail:"✖", sincopia:"◆", exento:"—", unknown:"?"};
 
 function politicaTexto(p){
   if(!p || !Object.keys(p).length) return "";
@@ -421,11 +312,10 @@ function tarjeta(i){
   const agenteMal = i.agente_estado && !/ready/i.test(i.agente_estado);
   const pol = politicaTexto(i.politica_detalle);
 
-  // Linea principal: estado de la copia y cuando fue
   const linea = i.protected
     ? `<span class="estado ${vclass}">${esc(i.last_backup_status || "—")}</span>
-       <span class="cuando">${i.last_backup_time ? ago(i.last_backup_time) : ""}</span>`
-    : `<span class="estado ${vclass}">${i.state === "exento" ? "Exenta de copia" : "Sin copia de seguridad"}</span>`;
+       <span class="cuando">${i.last_backup_time ? "· " + ago(i.last_backup_time) : ""}</span>`
+    : `<span class="estado ${vclass}">${i.state === "exento" ? "Exenta de copia" : "Sin copia"}</span>`;
 
   const etiquetas = Object.entries(i.tags || {}).slice(0, 2)
     .map(([k, v]) => `<span class="tag az">${esc(k)}: ${esc(v)}</span>`).join("");
@@ -439,7 +329,7 @@ function tarjeta(i){
     ${agenteMal ? `<div class="aviso">Agente VM: ${esc(i.agente_estado)}</div>` : ""}
     ${i.protection_state && i.protection_state !== "Protected"
       ? `<div class="aviso">Protección: ${esc(i.protection_state)}</div>` : ""}
-    <div class="sub secundaria">
+    <div class="sub">
       ${esc(i.resource_group)}${i.ip ? " · " + esc(i.ip) : ""}
       ${pol ? `<br>${esc(pol)}` : ""}
       ${i.ultima_duracion_s != null ? ` · ${dur(i.ultima_duracion_s)}` : ""}
@@ -460,8 +350,8 @@ function bloqueGrupo(nombre, color, miembros){
   const pills = [
     c.fail     ? `<span class="pill alarm">✖ ${c.fail} con fallo</span>` : "",
     c.sincopia ? `<span class="pill nobkp">◆ ${c.sincopia} sin copia</span>` : "",
-    c.warn     ? `<span class="pill warn">⚠ ${c.warn} atención</span>` : "",
-    c.ok       ? `<span class="pill ok">✔ ${c.ok} correctas</span>` : "",
+    c.warn     ? `<span class="pill warn">▲ ${c.warn} atención</span>` : "",
+    c.ok       ? `<span class="pill ok">● ${c.ok} correctas</span>` : "",
     c.exento   ? `<span class="pill off">— ${c.exento} exentas</span>` : ""
   ].join("");
   return `<div class="grupo" style="--gc:${esc(color)}">
@@ -494,7 +384,6 @@ function pintarCards(){
   if(huerfanas.length) html += bloqueGrupo("Sin clasificar", "#f59e0b", huerfanas);
 
   $("grupos").innerHTML = html || '<div class="empty">Sin resultados.</div>';
-  fitTV();
 }
 
 function pintarChart(){
@@ -557,7 +446,6 @@ setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("es-E
 setInterval(updateOverlay, 1000);
 setInterval(cargar, REFRESH_S * 1000);
 
-paintAlertBtn();
 cargar();
 </script>
 </body>
