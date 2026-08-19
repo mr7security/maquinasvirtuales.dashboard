@@ -65,32 +65,36 @@
   .grupo-name .swatch{width:14px; height:14px; border-radius:4px; background:var(--gc)}
   .grupo-sum{display:flex; gap:8px; flex-wrap:wrap}
 
-  /* ---------- tarjetas ---------- */
-  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px}
-  .card{background:var(--card); border-radius:12px; padding:12px 14px; border-left:5px solid var(--off);
-        display:flex; flex-direction:column}
+  /* ---------- tarjetas compactas ---------- */
+  .cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(238px,1fr)); gap:8px}
+  .card{background:var(--card); border-radius:10px; padding:8px 11px; border-left:4px solid var(--off);
+        display:flex; flex-direction:column; gap:4px}
   .card.ok{border-left-color:var(--ok)}
   .card.warn{border-left-color:var(--warn)}
   .card.fail{border-left-color:var(--alarm); animation:blink 1.2s infinite}
   .card.sincopia{border-left-color:var(--nobkp)}
-  .card.exento{border-left-color:var(--off); opacity:.62}
+  .card.exento{border-left-color:var(--off); opacity:.6}
   @keyframes blink{50%{background:#3b1f2b}}
-  .card-h{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px}
-  .card-h h2{font-size:1.05rem; font-weight:700; text-transform:uppercase; letter-spacing:.02em; word-break:break-word}
-  .status{font-size:.75rem; font-weight:700; white-space:nowrap}
+
+  .card-h{display:flex; justify-content:space-between; align-items:center; gap:6px}
+  .card-h h2{font-size:.86rem; font-weight:700; letter-spacing:.01em; word-break:break-word; line-height:1.25}
+  .status{font-size:.9rem; line-height:1; white-space:nowrap}
   .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.fail{color:var(--alarm)}
   .status.sincopia{color:var(--nobkp)} .status.exento,.status.unknown{color:var(--off)}
-  .big{background:var(--card2); border-radius:10px; padding:8px 12px 10px; margin-bottom:8px}
-  .label{font-size:.66rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em}
-  .value{font-size:1.65rem; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums}
-  .value small{font-size:.55em; font-weight:500; color:var(--muted)}
+
+  .linea{display:flex; align-items:baseline; gap:6px; font-size:.76rem; line-height:1.3}
+  .linea .estado{font-weight:700}
+  .linea .cuando{color:var(--muted); font-variant-numeric:tabular-nums}
   .v-ok{color:var(--ok)} .v-warn{color:var(--warn)} .v-alarm{color:var(--alarm)} .v-nobkp{color:var(--nobkp)}
-  .rows{font-size:.78rem; color:var(--muted); display:grid; gap:2px}
-  .rows b{color:var(--text); font-weight:600}
-  .tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:9px}
-  .tag{font-size:.66rem; padding:2px 9px; border-radius:99px; background:var(--card2);
-       border:1px solid #334155; color:var(--muted); text-transform:uppercase; letter-spacing:.03em}
+  .sub{font-size:.7rem; color:var(--muted); line-height:1.35; word-break:break-word}
+  .sub b{color:var(--text); font-weight:600}
+  .aviso{color:var(--warn); font-size:.7rem; font-weight:600}
+
+  .tags{display:flex; flex-wrap:wrap; gap:4px; margin-top:1px}
+  .tag{font-size:.6rem; padding:1px 7px; border-radius:99px; background:var(--card2);
+       border:1px solid #334155; color:var(--muted); letter-spacing:.02em; white-space:nowrap}
   .tag.on{color:var(--ok); border-color:rgba(34,197,94,.45)}
+  .tag.az{color:var(--accent); border-color:rgba(56,189,248,.35)}
 
   /* ---------- grafico y tabla ---------- */
   h3{font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
@@ -126,16 +130,13 @@
   body.tv .grupo-sum .pill{padding:2px 8px; font-size:clamp(.6rem,.8vw,.95rem)}
   body.tv .cards{flex:1; min-height:0; display:grid; gap:6px; grid-auto-rows:1fr;
                  grid-auto-flow:column; grid-auto-columns:1fr; grid-template-columns:none}
-  body.tv .card{min-height:0; overflow:hidden; padding:8px 11px; justify-content:center}
-  body.tv .card-h{margin-bottom:4px}
-  body.tv .card-h h2{font-size:clamp(1rem,1.5vw,2.1rem)}
-  body.tv .status{font-size:clamp(.6rem,.8vw,1rem)}
-  body.tv .big{padding:4px 9px; margin-bottom:5px}
-  body.tv .label{font-size:clamp(.55rem,.8vw,1rem)}
-  body.tv .value{font-size:clamp(1.3rem,2.4vw,3.4rem)}
-  body.tv .rows{font-size:clamp(.6rem,.85vw,1.05rem)}
-  body.tv .tags{margin-top:5px}
-  body.tv .tag{font-size:clamp(.55rem,.7vw,.85rem)}
+  body.tv .card{min-height:0; overflow:hidden; padding:7px 10px; justify-content:center; gap:3px}
+  body.tv .card-h h2{font-size:clamp(.85rem,1.25vw,1.8rem)}
+  body.tv .status{font-size:clamp(.85rem,1.2vw,1.7rem)}
+  body.tv .linea{font-size:clamp(.7rem,1vw,1.35rem)}
+  body.tv .sub{font-size:clamp(.6rem,.8vw,1.05rem)}
+  body.tv .tag{font-size:clamp(.55rem,.7vw,.9rem)}
+  body.tv .card .sub.secundaria, body.tv .card .tags{display:none}
 
   /* ===== Overlay de sin conexion ===== */
   #offline-overlay{position:fixed; inset:0; z-index:9999; display:none;
@@ -172,7 +173,7 @@
 <div id="kpis"></div>
 
 <div class="tools">
-  <input type="search" id="q" placeholder="Filtrar por nombre o grupo de recursos…">
+  <input type="search" id="q" placeholder="Filtrar por nombre, grupo de recursos o IP…">
   <select id="f">
     <option value="">Todas</option>
     <option value="problema">Con incidencia</option>
@@ -403,33 +404,52 @@ function pintar(){
     (extras.length ? " · " + extras.join(" · ") : "");
 }
 
+const ICONO = {ok:"●", warn:"▲", fail:"✖", sincopia:"◆", exento:"—", unknown:"?"};
+
+function politicaTexto(p){
+  if(!p || !Object.keys(p).length) return "";
+  const partes = [];
+  if(p.frecuencia) partes.push(p.frecuencia.toLowerCase());
+  if(p.hora) partes.push(p.hora);
+  if(p.retencion) partes.push("ret. " + p.retencion);
+  return partes.join(" · ");
+}
+
 function tarjeta(i){
   const vclass = {ok:"v-ok", warn:"v-warn", fail:"v-alarm", sincopia:"v-nobkp"}[i.state] || "";
   const encendida = i.power_state === "running";
-  const principal = i.protected
-    ? `<div class="label">Último backup</div>
-       <div class="value ${vclass}">${esc(i.last_backup_status || "—")}
-         <small>${i.last_backup_time ? ago(i.last_backup_time) : ""}</small></div>`
-    : `<div class="label">Protección</div>
-       <div class="value ${vclass}">${i.state === "exento" ? "Exenta" : "Sin copia"}</div>`;
-  return `<div class="card ${i.state}">
+  const agenteMal = i.agente_estado && !/ready/i.test(i.agente_estado);
+  const pol = politicaTexto(i.politica_detalle);
+
+  // Linea principal: estado de la copia y cuando fue
+  const linea = i.protected
+    ? `<span class="estado ${vclass}">${esc(i.last_backup_status || "—")}</span>
+       <span class="cuando">${i.last_backup_time ? ago(i.last_backup_time) : ""}</span>`
+    : `<span class="estado ${vclass}">${i.state === "exento" ? "Exenta de copia" : "Sin copia de seguridad"}</span>`;
+
+  const etiquetas = Object.entries(i.tags || {}).slice(0, 2)
+    .map(([k, v]) => `<span class="tag az">${esc(k)}: ${esc(v)}</span>`).join("");
+
+  return `<div class="card ${i.state}" title="${esc(i.name)}${pol ? " — " + esc(pol) : ""}">
     <div class="card-h">
       <h2>${esc(i.name)}</h2>
-      <span class="status ${i.state}">${ETIQ[i.state] || ""}</span>
+      <span class="status ${i.state}">${ICONO[i.state] || ""}</span>
     </div>
-    <div class="big">${principal}</div>
-    <div class="rows">
-      ${i.protected ? `<div>${fmt(i.last_backup_time)}</div>` : ""}
-      <div>${esc(i.resource_group)}${i.location ? " · " + esc(i.location) : ""}</div>
-      ${i.protection_state && i.protection_state !== "Protected"
-        ? `<div><b>Protección: ${esc(i.protection_state)}</b></div>` : ""}
-      ${i.policy ? `<div>Política: ${esc(i.policy)}</div>` : ""}
+    <div class="linea">${linea}</div>
+    ${agenteMal ? `<div class="aviso">Agente VM: ${esc(i.agente_estado)}</div>` : ""}
+    ${i.protection_state && i.protection_state !== "Protected"
+      ? `<div class="aviso">Protección: ${esc(i.protection_state)}</div>` : ""}
+    <div class="sub secundaria">
+      ${esc(i.resource_group)}${i.ip ? " · " + esc(i.ip) : ""}
+      ${pol ? `<br>${esc(pol)}` : ""}
+      ${i.ultima_duracion_s != null ? ` · ${dur(i.ultima_duracion_s)}` : ""}
     </div>
     <div class="tags">
       ${i.kind === "vm" ? `<span class="tag ${encendida ? "on" : ""}">${esc(i.power_state || "estado?")}</span>` : ""}
-      ${i.os ? `<span class="tag">${esc(i.os)}</span>` : ""}
       ${i.size ? `<span class="tag">${esc(i.size)}</span>` : ""}
+      ${i.os ? `<span class="tag">${esc(i.os)}</span>` : ""}
       ${i.kind === "share" ? `<span class="tag">${esc(tipo(i.type))}</span>` : ""}
+      ${etiquetas}
     </div>
   </div>`;
 }
@@ -457,7 +477,7 @@ function pintarCards(){
   const d = DATA;
   const term = $("q").value.toLowerCase(), filtro = $("f").value;
   const visibles = (d.items||[]).filter(i => {
-    if(term && !((i.name + " " + i.resource_group).toLowerCase().includes(term))) return false;
+    if(term && !((i.name + " " + i.resource_group + " " + (i.ip||"")).toLowerCase().includes(term))) return false;
     if(filtro === "problema") return ["fail","warn","sincopia"].includes(i.state);
     if(filtro) return i.state === filtro;
     return true;

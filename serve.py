@@ -36,8 +36,10 @@ COLUMNAS = [
     ("resource_group", "grupo_recursos"),
     ("location", "ubicacion"),
     ("power_state", "estado_energia"),
+    ("ip", "ip_privada"),
     ("os", "sistema_operativo"),
     ("size", "tamano"),
+    ("grupo", "grupo"),
     ("protected", "protegida"),
     ("state", "estado"),
     ("vault", "vault"),
@@ -46,8 +48,17 @@ COLUMNAS = [
     ("health", "salud"),
     ("last_backup_status", "ultimo_backup_estado"),
     ("last_backup_time", "ultimo_backup_fecha"),
+    ("ultima_duracion_s", "ultima_duracion_segundos"),
     ("last_recovery_point", "ultimo_punto"),
     ("oldest_recovery_point", "punto_mas_antiguo"),
+    ("agente_estado", "agente_vm"),
+    ("agente_version", "agente_version"),
+]
+
+# Columnas que se aplanan a texto en el CSV
+COLUMNAS_EXTRA = [
+    ("politica_detalle", "politica_detalle"),
+    ("tags", "etiquetas"),
 ]
 
 
@@ -146,14 +157,17 @@ class Handler(BaseHTTPRequestHandler):
             valor = item.get(clave)
             if isinstance(valor, bool):
                 return "si" if valor else "no"
+            if isinstance(valor, dict):
+                return ", ".join(f"{k}={v}" for k, v in valor.items() if v)
             return "" if valor is None else valor
 
+        todas = COLUMNAS + COLUMNAS_EXTRA
         buffer = io.StringIO()
         # BOM + punto y coma: Excel en espanol lo abre bien de un doble clic
         escritor = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
-        escritor.writerow([titulo for _, titulo in COLUMNAS])
+        escritor.writerow([titulo for _, titulo in todas])
         for item in datos.get("items", []):
-            escritor.writerow([celda(item, clave) for clave, _ in COLUMNAS])
+            escritor.writerow([celda(item, clave) for clave, _ in todas])
 
         sello = datetime.now().strftime("%Y%m%d-%H%M")
         cuerpo = ("﻿" + buffer.getvalue()).encode("utf-8")

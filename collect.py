@@ -223,6 +223,59 @@ def power_state_from(instance_view) -> str:
     return ""
 
 
+def agente_from(instance_view) -> dict:
+    """Estado del agente de Azure: la causa habitual de los fallos de backup."""
+    data = model_dict(instance_view)
+    agente = data.get("vmAgent") or {}
+    estado = ""
+    for status in agente.get("statuses") or []:
+        s = model_dict(status)
+        estado = s.get("displayStatus") or s.get("code") or ""
+        if estado:
+            break
+    return {"agente_estado": str(estado), "agente_version": str(agente.get("vmAgentVersion") or "")}
+
+
+def resumen_politica(propiedades) -> dict:
+    """Convierte una politica de backup en algo legible: frecuencia, hora y retencion."""
+    d = model_dict(propiedades)
+    sched = d.get("schedulePolicy") or {}
+    ret = d.get("retentionPolicy") or {}
+
+    frecuencia = str(sched.get("scheduleRunFrequency") or "").capitalize()
+    hora = ""
+    tiempos = sched.get("scheduleRunTimes") or []
+    if tiempos:
+        texto = str(tiempos[0])
+        if "T" in texto and len(texto) >= 16:
+            hora = texto[11:16]
+
+    def duracion(bloque: dict | None) -> str:
+        bloque = (bloque or {}).get("retentionDuration") or {}
+        cuenta, unidad = bloque.get("count"), str(bloque.get("durationType") or "").lower()
+        if not cuenta:
+            return ""
+        nombres = {"days": "días", "weeks": "semanas", "months": "meses", "years": "años"}
+        return f"{cuenta} {nombres.get(unidad, unidad)}"
+
+    extras = []
+    for clave, etiqueta in (
+        ("weeklySchedule", "semanal"),
+        ("monthlySchedule", "mensual"),
+        ("yearlySchedule", "anual"),
+    ):
+        texto = duracion(ret.get(clave))
+        if texto:
+            extras.append(f"{etiqueta} {texto}")
+
+    return {
+        "frecuencia": frecuencia,
+        "hora": hora,
+        "retencion": duracion(ret.get("dailySchedule")),
+        "retencion_extra": ", ".join(extras),
+    }
+
+
 # --------------------------------------------------------------------------
 # Recoleccion real desde Azure
 # --------------------------------------------------------------------------
@@ -253,6 +306,15 @@ def collect_azure(days: int, sla_hours: float) -> dict:
     compute = ComputeManagementClient(credential, subscription_id)
     rsv_client = RecoveryServicesClient(credential, subscription_id)
     backup_client = RecoveryServicesBackupClient(credential, subscription_id)
+
+    # La red es opcional: si falta el paquete, seguimos sin IPs
+    network = None
+    try:
+        from azure.mgmt.network import NetworkManagementClient
+
+        network = NetworkManagementClient(credential, subscription_id)
+    except Exception:  # noqa: BLE001
+        network = None
 
     ignore_patterns = env_list("VM_IGNORE_PATTERNS")
     grupos_cfg = cargar_grupos()
@@ -285,9 +347,17 @@ def collect_azure(days: int, sla_hours: float) -> dict:
     backups_by_resource: dict[str, dict] = {}
     other_protected: list[dict] = []
     jobs: list[dict] = []
+    politicas: dict[str, dict] = {}
 
     for vault in vaults:
         vname, vrg = vault["name"], vault["resource_group"]
+
+        # --- Politicas: frecuencia, hora y retencion reales ------------------
+        try:
+            for politica in backup_client.backup_policies.list(vname, vrg):
+                politicas[str(politica.name)] = resumen_politica(politica.properties)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Politicas de {vname}: {exc}")
 
         try:
             for item in backup_client.backup_protected_items.list(vname, vrg):
@@ -347,6 +417,12 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                             "protected": True,
                             "grupo": grupo.get("nombre", ""),
                             "grupo_color": grupo.get("color", "#94a3b8"),
+                            "ip": "",
+                            "tags": {},
+                            "agente_estado": "",
+                            "agente_version": "",
+                            "politica_detalle": {},
+                            "ultima_duracion_s": None,
                         }
                     )
                     other_protected.append(record)
@@ -386,7 +462,33 @@ def collect_azure(days: int, sla_hours: float) -> dict:
             errors.append(f"Jobs de {vname}: {exc}")
 
     # ----------------------------------------------------------------------
-    # 2. Inventario de VMs, cruzado con lo anterior
+    # 2. Datos auxiliares: IP privada y ultimo job por maquina
+    # ----------------------------------------------------------------------
+    ips: dict[str, str] = {}
+    if network is not None:
+        try:
+            for nic in network.network_interfaces.list_all():
+                d = model_dict(nic)
+                vm_ref = (d.get("virtualMachine") or {}).get("id")
+                if not vm_ref:
+                    continue
+                for cfg in d.get("ipConfigurations") or []:
+                    privada = model_dict(cfg).get("privateIPAddress")
+                    if privada:
+                        ips.setdefault(str(vm_ref).lower(), str(privada))
+                        break
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Direcciones IP: {exc}")
+
+    ultimo_job: dict[str, dict] = {}
+    for job in jobs:  # ya vienen sin ordenar; nos quedamos con el mas reciente
+        clave = job["name"].lower()
+        anterior = ultimo_job.get(clave)
+        if not anterior or (job.get("start_time") or "") > (anterior.get("start_time") or ""):
+            ultimo_job[clave] = job
+
+    # ----------------------------------------------------------------------
+    # 3. Inventario de VMs, cruzado con todo lo anterior
     # ----------------------------------------------------------------------
     items: list[dict] = []
 
@@ -405,13 +507,16 @@ def collect_azure(days: int, sla_hours: float) -> dict:
             storage = d.get("storageProfile") or {}
             os_disk = storage.get("osDisk") or {}
 
-            power = power_state_from(getattr(vm, "instance_view", None) or d.get("instanceView"))
-            if not power:
+            view = getattr(vm, "instance_view", None) or d.get("instanceView")
+            power = power_state_from(view)
+            agente = agente_from(view)
+            if not power or not agente["agente_estado"]:
                 try:
                     view = compute.virtual_machines.instance_view(parse_rg(vm_id), name)
-                    power = power_state_from(view)
+                    power = power or power_state_from(view)
+                    agente = agente_from(view) if not agente["agente_estado"] else agente
                 except Exception:  # noqa: BLE001
-                    power = ""
+                    pass
 
             backup = backups_by_resource.pop(vm_id.lower(), None)
             grupo = asignar_grupo(name, grupos_cfg)
@@ -446,6 +551,12 @@ def collect_azure(days: int, sla_hours: float) -> dict:
                     "oldest_recovery_point": backup["oldest_recovery_point"] if backup else None,
                     "last_recovery_point": backup["last_recovery_point"] if backup else None,
                     "type": backup["type"] if backup else "AzureIaasVM",
+                    "ip": ips.get(vm_id.lower(), ""),
+                    "tags": {str(k): str(v) for k, v in (d.get("tags") or {}).items()},
+                    "agente_estado": agente["agente_estado"],
+                    "agente_version": agente["agente_version"],
+                    "politica_detalle": politicas.get(backup["policy"], {}) if backup else {},
+                    "ultima_duracion_s": (ultimo_job.get(name.lower()) or {}).get("duration_s"),
                 }
             )
     except Exception as exc:  # noqa: BLE001
@@ -454,6 +565,11 @@ def collect_azure(days: int, sla_hours: float) -> dict:
     # Lo que queda en backups_by_resource son copias de VMs que ya no existen.
     # Por decision de diseno no se muestran, solo se cuentan.
     orphans = len(backups_by_resource)
+
+    # Los elementos que no son VM (Azure Files) tambien llevan politica y duracion
+    for extra in other_protected:
+        extra["politica_detalle"] = politicas.get(extra.get("policy", ""), {})
+        extra["ultima_duracion_s"] = (ultimo_job.get(extra["name"].lower()) or {}).get("duration_s")
 
     items.extend(other_protected)
     return build_payload(
@@ -518,6 +634,19 @@ def collect_demo(days: int, sla_hours: float) -> dict:
                 "oldest_recovery_point": iso(now - timedelta(days=30)) if protegida else None,
                 "last_recovery_point": last,
                 "type": "AzureIaasVM",
+                "ip": f"10.50.70.{20 + len(items)}",
+                "tags": {"entorno": "demo"},
+                "agente_estado": "Ready" if power == "running" else "",
+                "agente_version": "2.7.41491.1144",
+                "politica_detalle": {
+                    "frecuencia": "Daily",
+                    "hora": "02:00",
+                    "retencion": "30 días",
+                    "retencion_extra": "",
+                }
+                if protegida
+                else {},
+                "ultima_duracion_s": random.randint(500, 2700) if protegida else None,
             }
         )
 
