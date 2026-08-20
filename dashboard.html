@@ -77,6 +77,7 @@
   .proc.warn{border-left-color:var(--warn)}
   .proc.fail{border-left-color:var(--alarm); animation:blink 1.2s infinite}
   .proc.sinejecutar{border-left-color:var(--nobkp)}
+  .proc.inactivo{border-left-color:var(--off); opacity:.55}
   .proc-h{display:flex; justify-content:space-between; align-items:center; gap:8px}
   .proc-h h2{font-size:.9rem; font-weight:700; overflow-wrap:anywhere}
   .msg{background:var(--card2); border-radius:7px; padding:7px 9px; font-size:.7rem;
@@ -612,7 +613,7 @@ function pintarJobs(){
 
 /* ---------- procesos BI ---------- */
 const ETIQ_PROC = {ok:"● Correcto", warn:"▲ Con advertencias", fail:"✖ Con errores",
-                   sinejecutar:"◆ No ejecutado", unknown:"? Sin datos"};
+                   sinejecutar:"◆ No ejecutado", inactivo:"— Sin actividad", unknown:"? Sin datos"};
 
 function pintarProcesos(){
   const p = PROC; if(!p) return;
@@ -641,7 +642,8 @@ function pintarProcesos(){
     ["ok", c.ok||0, "Correctos"],
     ["warn", c.warn||0, "Advertencias"],
     ["alarm", c.fail||0, "Con errores"],
-    ["nobkp", c.sinejecutar||0, "No ejecutados"]
+    ["nobkp", c.sinejecutar||0, "No ejecutados"],
+    ["", c.inactivo||0, "Sin actividad"]
   ].map(([k,n,l]) => `<div class="kpi ${k}"><div class="n">${n}</div><div class="l">${l}</div></div>`)
    .join('<div class="sep"></div>');
 

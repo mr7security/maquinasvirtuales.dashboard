@@ -45,7 +45,7 @@ MARGEN_HORAS = float(os.environ.get("RUNBOOK_MARGEN_HORAS", "3"))
 # Cuantos registros de error guardamos por ejecucion
 MAX_MENSAJES = 6
 
-ORDEN_ESTADO = {"fail": 0, "sinejecutar": 1, "warn": 2, "unknown": 3, "ok": 4}
+ORDEN_ESTADO = {"fail": 0, "sinejecutar": 1, "warn": 2, "ok": 3, "inactivo": 4, "unknown": 5}
 
 
 # --------------------------------------------------------------------------
@@ -149,9 +149,15 @@ def intervalo_habitual(ejecuciones: list[dict]) -> tuple[float | None, float | N
 
 
 def clasificar(job: dict | None, esperada: str | None) -> str:
-    """ok | warn | fail | sinejecutar | unknown."""
+    """ok | warn | fail | sinejecutar | inactivo.
+
+    'inactivo' es para runbooks que existen en la cuenta pero no se han
+    ejecutado en la ventana observada. No cuentan como incidencia: al
+    descubrir todos los runbooks automaticamente aparecen los que estan en
+    desuso, y dejarlos en ambar acabaria tapando los avisos de verdad.
+    """
     if job is None:
-        return "sinejecutar" if esperada else "unknown"
+        return "sinejecutar" if esperada else "inactivo"
 
     estado = (job.get("estado") or "").lower()
 
@@ -501,13 +507,14 @@ def collect_demo(dias: int) -> dict:
 def build_payload(procesos, historico, dias, cuenta, grupo, errores) -> dict:
     procesos.sort(key=lambda p: (ORDEN_ESTADO.get(p["estado"], 9), p["nombre"].lower()))
 
-    counts = {"ok": 0, "warn": 0, "fail": 0, "sinejecutar": 0, "unknown": 0}
+    counts = {"ok": 0, "warn": 0, "fail": 0, "sinejecutar": 0, "inactivo": 0, "unknown": 0}
     for p in procesos:
         counts[p["estado"]] = counts.get(p["estado"], 0) + 1
 
+    # 'inactivo' no arrastra el estado global: son runbooks en desuso
     if counts["fail"]:
         overall = "fail"
-    elif counts["sinejecutar"] or counts["warn"] or counts["unknown"]:
+    elif counts["sinejecutar"] or counts["warn"]:
         overall = "warn"
     else:
         overall = "ok"
@@ -554,7 +561,7 @@ def main() -> int:
             "cuenta": os.environ.get("AUTOMATION_ACCOUNT", ""),
             "resource_group": os.environ.get("AUTOMATION_RESOURCE_GROUP", ""),
             "overall": "fail",
-            "counts": {"ok": 0, "warn": 0, "fail": 0, "sinejecutar": 0, "unknown": 0},
+            "counts": {"ok": 0, "warn": 0, "fail": 0, "sinejecutar": 0, "inactivo": 0, "unknown": 0},
             "procesos": [],
             "historico": [],
             "total_errores": 0,
